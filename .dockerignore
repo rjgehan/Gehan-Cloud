@@ -1,0 +1,21 @@
+# Build output — the image builds from source inside the container.
+target/
+
+# Runtime state — must never be baked into an image.
+*.db
+*.db-shm
+*.db-wal
+grocery.json
+.env
+
+# Repo metadata and editor config
+.git/
+.github/
+.gitignore
+.gitattributes
+.idea/
+.vscode/
+*.iml
+README.md
+LICENSE
+HELP.md

@@ -8,23 +8,21 @@
 		<version>3.5.4</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<groupId>com.example</groupId>
-	<artifactId>demo</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
-	<name>demo</name>
-	<description>Demo project for Spring Boot</description>
-	<url/>
+	<groupId>cloud.gehan</groupId>
+	<artifactId>gehan-cloud</artifactId>
+	<version>1.0.0</version>
+	<name>Gehan Cloud</name>
+	<description>Self-hosted personal cloud portal: form login, role-based user administration, JWT-protected APIs, and a shared grocery list.</description>
+	<url>https://github.com/rjgehan/Gehan-Cloud</url>
 	<licenses>
-		<license/>
+		<license>
+			<name>MIT License</name>
+			<url>https://opensource.org/licenses/MIT</url>
+		</license>
 	</licenses>
-	<developers>
-		<developer/>
-	</developers>
 	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
+		<connection>scm:git:https://github.com/rjgehan/Gehan-Cloud.git</connection>
+		<url>https://github.com/rjgehan/Gehan-Cloud</url>
 	</scm>
 	<properties>
 		<java.version>21</java.version>
@@ -70,7 +68,7 @@
 		<dependency>
 			<groupId>com.h2database</groupId>
 			<artifactId>h2</artifactId>
-			<scope>runtime</scope>
+			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>

@@ -1,2 +1,14 @@
-/mvnw text eol=lf
+* text=auto eol=lf
+
 *.cmd text eol=crlf
+*.bat text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.JPG binary
+*.webp binary
+*.heic binary
+*.ico binary
+*.db binary
+*.jar binary
