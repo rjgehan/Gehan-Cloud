@@ -8,6 +8,9 @@
 @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap");
 
 :root {
+    /* The pager reads these to work out how many tiles fit on one page. */
+    --cols: 4;
+    --rows: 2;
     --tile: 68px;
     --radius-tile: 23%;
     --col: 420px;
@@ -155,11 +158,79 @@ body {
 }
 
 /* --- app grid ------------------------------------------------------------- */
-.apps {
+/* .apps is what the server renders and what shows without JS. .page is one
+   screenful inside the pager. They share a grid so paging changes nothing
+   about how a tile looks. */
+.apps,
+.page {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
+    align-content: start;
     gap: 22px 10px;
+}
+
+.apps {
     margin-bottom: 34px;
+}
+
+/* --- pager: swipe between pages of apps ----------------------------------- */
+.pager {
+    display: flex;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.pager::-webkit-scrollbar {
+    display: none;
+}
+
+.page {
+    flex: 0 0 100%;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+}
+
+.dots {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 9px;
+    margin: 16px 0 34px;
+    min-height: 10px;
+}
+
+/* One page needs no dots. */
+.dots:empty,
+.dots.single {
+    margin: 0 0 34px;
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .34);
+    cursor: pointer;
+    transition: background .18s ease, transform .18s ease;
+}
+
+.dot:hover {
+    background: rgba(255, 255, 255, .6);
+}
+
+.dot[aria-current="true"] {
+    background: #fff;
+    transform: scale(1.15);
+}
+
+.dot:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
 }
 
 .app {
@@ -212,15 +283,20 @@ body {
     outline-offset: 3px;
 }
 
-/* Per-app colours: on a launch pad, colour is what the eye finds first.
-   Change the two stops to recolour an app. */
-.a-photos  { --a1: #a06bff; --a2: #6435c9; }
-.a-grocery { --a1: #ffb648; --a2: #e07a12; }
-.a-home    { --a1: #35c8d8; --a2: #0f8a9c; }
-.a-tools   { --a1: #5aa9ff; --a2: #1f66c4; }
-.a-takeout { --a1: #ff7a72; --a2: #d1372e; }
-.a-maps    { --a1: #57cc72; --a2: #1f8a3e; }
-.a-users   { --a1: #9aa7b2; --a2: #4d5b68; }
+/* Tile palettes. Pick one by name in apps.yml (color: violet). On a launch pad
+   colour is what the eye finds first, so give related services related hues. */
+.a-violet { --a1: #a06bff; --a2: #6435c9; }
+.a-indigo { --a1: #7c8cff; --a2: #3b45b5; }
+.a-blue   { --a1: #5aa9ff; --a2: #1f66c4; }
+.a-cyan   { --a1: #4fd2f0; --a2: #1183a8; }
+.a-teal   { --a1: #35c8d8; --a2: #0f8a9c; }
+.a-green  { --a1: #57cc72; --a2: #1f8a3e; }
+.a-lime   { --a1: #b3e05a; --a2: #6f9c14; }
+.a-amber  { --a1: #ffb648; --a2: #e07a12; }
+.a-orange { --a1: #ff9a52; --a2: #d4560d; }
+.a-red    { --a1: #ff7a72; --a2: #d1372e; }
+.a-pink   { --a1: #ff86bb; --a2: #c53b7d; }
+.a-slate  { --a1: #9aa7b2; --a2: #4d5b68; }
 
 /* --- weather widgets ------------------------------------------------------ */
 .widgets {
@@ -305,7 +381,9 @@ body {
     gap: 4px 7px;
 }
 
-.wx-meta .dot {
+/* Named .sep, not .dot: .dot belongs to the pager and its background would
+   otherwise paint a box behind this separator. */
+.wx-meta .sep {
     display: none;
     opacity: .5;
 }
@@ -324,14 +402,16 @@ body {
 .bg-nyc.night { background-image: url("/weatherImages/newyork-night.jpeg"); }
 .bg-ash { background-image: url("/weatherImages/ashburn.png"); }
 .bg-ash.night { background-image: url("/weatherImages/ashburn-night.jpg"); }
-/* No night photo for this one: the browser cannot decode the .heic that used to
-   be referenced here, so the night wash above carries it. Drop in a .jpg and add
-   a .bg-man.night rule if you want a separate night shot. */
-.bg-man { background-image: url("/weatherImages/ocean-city.webp"); }
+/* No night photo for this one: manasquan_night.heic is a format no browser can
+   decode, so the night wash above carries it. Drop in a .jpg and add a
+   .bg-man.night rule if you want a separate night shot. */
+.bg-man { background-image: url("/weatherImages/manasquan.jpeg"); }
 
 /* --- wider screens: more columns, never a stretched layout ---------------- */
 @media (min-width: 700px) {
     :root {
+        --cols: 7;
+        --rows: 2;
         --tile: 84px;
         --col: 720px;
     }
@@ -349,14 +429,13 @@ body {
         margin-block: auto;
     }
 
-    /* Fixed-width tracks + centred justification keeps the row centred whether
-       there are six apps or seven (the Users tile is admin-only). */
-    .apps {
-        grid-template-columns: repeat(auto-fit, 88px);
-        justify-content: center;
+    .apps,
+    .page {
+        grid-template-columns: repeat(7, 1fr);
         gap: 26px 14px;
-        margin-bottom: 42px;
     }
+
+    .apps { margin-bottom: 42px; }
 
     .widgets {
         grid-template-columns: repeat(4, 1fr);
@@ -370,18 +449,21 @@ body {
 
 @media (min-width: 1040px) {
     :root {
+        --cols: 7;
+        --rows: 2;
         --tile: 96px;
         --col: 940px;
     }
 
     body { padding-top: 48px; }
 
-    .apps {
-        grid-template-columns: repeat(auto-fit, 104px);
+    .apps,
+    .page {
+        grid-template-columns: repeat(7, 1fr);
         gap: 30px 16px;
     }
 
-    .wx-meta .dot { display: inline; }
+    .wx-meta .sep { display: inline; }
 
     .widgets { gap: 18px; }
 
@@ -399,7 +481,10 @@ body {
     .bg { animation: none; }
 
     .app-icon,
-    .chip { transition: none; }
+    .chip,
+    .dot { transition: none; }
+
+    .pager { scroll-behavior: auto; }
 }
 
 .sr-only {

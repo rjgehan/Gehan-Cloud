@@ -124,6 +124,35 @@ Every secret comes from the environment; nothing sensitive lives in
 | `APP_BOOTSTRAP_ADMIN` | `admin` | Username created when the database is empty. |
 | `LOG_LEVEL` / `APP_LOG_LEVEL` | `INFO` | Root and application log levels. |
 
+## Adding a service to the portal
+
+The home screen is driven by [`apps.yml`](src/main/resources/apps.yml). Adding a
+service is one entry; nothing else changes.
+
+```yaml
+portal:
+  apps:
+    - label: Plex
+      url: https://plex.gehan.cloud
+      icon: bi-film
+      color: indigo
+```
+
+| Key | Purpose |
+| --- | --- |
+| `label` | Text under the icon. One short word reads best. |
+| `url` | Absolute for another service, or `/path` for a page in this app. Absolute URLs open in a new tab. |
+| `icon` | Any [Bootstrap Icons](https://icons.getbootstrap.com) name. |
+| `color` | A palette from `home.css`: violet indigo blue cyan teal green lime amber orange red pink slate. Defaults to slate. |
+| `adminOnly` | `true` hides the tile from everyone who is not an admin. |
+
+Tiles fill a page and overflow onto the next one you swipe to, the way a phone
+home screen does, so there is no tile count to keep under. How many fit per page
+comes from `--cols` / `--rows` in `home.css`, so it re-pages itself at each
+breakpoint rather than hard-coding a number. Without JavaScript the tiles stay a
+single grid and every link still works.
+
+
 ## Account lifecycle
 
 Accounts are managed in the app, not in code. Sign in as an admin and the portal
@@ -170,12 +199,17 @@ redeploys.
 
 ```
 src/main/java/cloud/gehan/
-├── config/       SecurityConfig, AdminBootstrap
+├── config/       SecurityConfig, AdminBootstrap, PortalProperties
 ├── controller/   HTTP endpoints
 ├── model/        User entity, grocery records
 ├── repository/   Spring Data JPA
 ├── security/     FirstLoginAuthenticationProvider, JwtUtil, ApiKeyFilter
 └── service/      UserService, GroceryService — business rules and lockout guards
+
+src/main/resources/
+├── apps.yml      the portal tile list — add services here
+├── static/css/   home.css (portal), users.css, and the older per-page sheets
+└── templates/    index, login, users
 ```
 
 ## License

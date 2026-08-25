@@ -40,45 +40,20 @@
             </div>
         </header>
 
-        <!-- To add an app, copy one <a class="app"> block and give it a colour
-             class (the .a-* rules live near the top of home.css). -->
-        <nav class="apps" aria-label="Apps">
-
-            <a class="app" href="https://photos.gehan.cloud">
-                <span class="app-icon a-photos"><i class="bi bi-images" aria-hidden="true"></i></span>
-                <span class="app-label">Photos</span>
+        <!-- Tiles come from apps.yml. Add a service there, not here.
+             Without JS this stays one grid; indexjs.js turns it into swipeable
+             pages with dots once it runs. -->
+        <nav class="apps" id="apps" aria-label="Apps">
+            <a class="app" th:each="app : ${apps}"
+               th:href="${app.url}"
+               th:title="${app.label}"
+               th:target="${app.external} ? '_blank' : null"
+               th:rel="${app.external} ? 'noopener' : null">
+                <span class="app-icon" th:classappend="'a-' + ${app.color}">
+                    <i class="bi" th:classappend="${app.icon}" aria-hidden="true"></i>
+                </span>
+                <span class="app-label" th:text="${app.label}">App</span>
             </a>
-
-            <a class="app" href="https://grocery.gehan.cloud">
-                <span class="app-icon a-grocery"><i class="bi bi-cart-fill" aria-hidden="true"></i></span>
-                <span class="app-label">Grocery</span>
-            </a>
-
-            <a class="app" href="https://ha.gehan.cloud">
-                <span class="app-icon a-home"><i class="bi bi-house-door-fill" aria-hidden="true"></i></span>
-                <span class="app-label">Home</span>
-            </a>
-
-            <a class="app" href="/pages/ashburn.html" title="Ashburn Tools">
-                <span class="app-icon a-tools"><i class="bi bi-tools" aria-hidden="true"></i></span>
-                <span class="app-label">Tools</span>
-            </a>
-
-            <a class="app" href="/pages/ashburnTakeout.html" title="Ashburn Takeout">
-                <span class="app-icon a-takeout"><i class="bi bi-bag-fill" aria-hidden="true"></i></span>
-                <span class="app-label">Takeout</span>
-            </a>
-
-            <a class="app" href="/pages/maps.html">
-                <span class="app-icon a-maps"><i class="bi bi-map-fill" aria-hidden="true"></i></span>
-                <span class="app-label">Maps</span>
-            </a>
-
-            <a class="app" th:if="${isAdmin}" href="/users">
-                <span class="app-icon a-users"><i class="bi bi-people-fill" aria-hidden="true"></i></span>
-                <span class="app-label">Users</span>
-            </a>
-
         </nav>
 
         <h2 class="section-label">Weather</h2>
@@ -93,7 +68,7 @@
                 </div>
                 <p class="wx-meta">
                     <span id="ham-rh">&mdash;</span>
-                    <span class="dot" aria-hidden="true">&middot;</span>
+                    <span class="sep" aria-hidden="true">&middot;</span>
                     <span id="ham-wind">&mdash;</span>
                 </p>
             </article>
@@ -106,7 +81,7 @@
                 </div>
                 <p class="wx-meta">
                     <span id="nyc-rh">&mdash;</span>
-                    <span class="dot" aria-hidden="true">&middot;</span>
+                    <span class="sep" aria-hidden="true">&middot;</span>
                     <span id="nyc-wind">&mdash;</span>
                 </p>
             </article>
@@ -119,20 +94,20 @@
                 </div>
                 <p class="wx-meta">
                     <span id="ash-rh">&mdash;</span>
-                    <span class="dot" aria-hidden="true">&middot;</span>
+                    <span class="sep" aria-hidden="true">&middot;</span>
                     <span id="ash-wind">&mdash;</span>
                 </p>
             </article>
 
             <article class="wx flex-weather bg-man">
-                <p class="wx-place">Ocean City</p>
+                <p class="wx-place">Manasquan</p>
                 <div class="wx-mid">
                     <span class="wx-temp" id="man-temp">&mdash;</span>
                     <span id="man-desc"></span>
                 </div>
                 <p class="wx-meta">
                     <span id="man-rh">&mdash;</span>
-                    <span class="dot" aria-hidden="true">&middot;</span>
+                    <span class="sep" aria-hidden="true">&middot;</span>
                     <span id="man-wind">&mdash;</span>
                 </p>
             </article>

@@ -1,0 +1,60 @@
+# =============================================================================
+# The portal's app tiles. This is the one place to add a service.
+#
+# The home screen fills a page with as many tiles as fit, then starts another
+# page you swipe to, so you never have to think about how many will fit.
+# Order here is the order on screen.
+#
+#   label      text under the icon. One short word reads best.
+#   url        absolute for another service, or /path for a page in this app.
+#   icon       any Bootstrap Icons name: https://icons.getbootstrap.com
+#   color      a palette from home.css: violet amber teal blue red green
+#              indigo pink cyan lime orange slate. Omitted means slate.
+#   adminOnly  true hides the tile from everyone who is not an admin.
+# =============================================================================
+portal:
+  apps:
+
+    - label: Photos
+      url: https://photos.gehan.cloud
+      icon: bi-images
+      color: violet
+
+    - label: Grocery
+      url: https://grocery.gehan.cloud
+      icon: bi-cart-fill
+      color: amber
+
+    - label: Home
+      url: https://ha.gehan.cloud
+      icon: bi-house-door-fill
+      color: teal
+
+    - label: Tools
+      url: /pages/ashburn.html
+      icon: bi-tools
+      color: blue
+
+    - label: Takeout
+      url: /pages/ashburnTakeout.html
+      icon: bi-bag-fill
+      color: red
+
+    - label: Maps
+      url: /pages/maps.html
+      icon: bi-map-fill
+      color: green
+
+    - label: Users
+      url: /users
+      icon: bi-people-fill
+      color: slate
+      adminOnly: true
+
+    # Temporary: the index of every page in the app, for the cleanup pass.
+    # Delete this entry and static/pages/all-links.html when you are done.
+    - label: All Links
+      url: /pages/all-links.html
+      icon: bi-list-ul
+      color: slate
+      adminOnly: true

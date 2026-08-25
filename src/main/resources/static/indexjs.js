@@ -2,7 +2,7 @@ const LOCATIONS = [
     { name: "Hamilton", lat: 40.22, lon: -74.65, prefix: "ham" },
     { name: "New York", lat: 40.7128, lon: -74.0060, prefix: "nyc" },
     { name: "Ashburn", lat: 39.0438, lon: -77.4874, prefix: "ash" },
-    { name: "Ocean City", lat: 39.2794, lon: -74.5769, prefix: "man" }
+    { name: "Manasquan", lat: 40.1265, lon: -74.0424, prefix: "man" }
 ];
 
 const WMO_DESC = [
@@ -139,3 +139,108 @@ function tickClock() {
 
 tickClock();
 setInterval(tickClock, 10 * 1000);
+
+// --- app pager --------------------------------------------------------------
+// Turns the single app grid into iPhone-style pages you swipe between. How many
+// tiles fit on a page comes from --cols/--rows in home.css, so it re-pages
+// itself when the breakpoint changes instead of hard-coding a count.
+
+function readGridSize() {
+    const root = getComputedStyle(document.documentElement);
+    const cols = parseInt(root.getPropertyValue("--cols"), 10);
+    const rows = parseInt(root.getPropertyValue("--rows"), 10);
+    return {
+        cols: Number.isFinite(cols) && cols > 0 ? cols : 4,
+        rows: Number.isFinite(rows) && rows > 0 ? rows : 2
+    };
+}
+
+function buildPager() {
+    const grid = document.getElementById("apps");
+    if (!grid) return;
+
+    // Remember the tiles once; later rebuilds reuse these same elements.
+    if (!buildPager.tiles) {
+        buildPager.tiles = Array.from(grid.querySelectorAll(".app"));
+    }
+    const tiles = buildPager.tiles;
+    if (!tiles.length) return;
+
+    const { cols, rows } = readGridSize();
+    const perPage = cols * rows;
+    const pageCount = Math.ceil(tiles.length / perPage);
+
+    // Everything fits: leave the plain grid alone.
+    if (pageCount <= 1) {
+        teardownPager();
+        tiles.forEach(t => grid.appendChild(t));
+        grid.hidden = false;
+        return;
+    }
+
+    const previous = buildPager.index || 0;
+    teardownPager();
+
+    const pager = document.createElement("div");
+    pager.className = "pager";
+    pager.id = "pager";
+
+    for (let i = 0; i < pageCount; i++) {
+        const page = document.createElement("div");
+        page.className = "page";
+        page.setAttribute("role", "group");
+        page.setAttribute("aria-label", "Apps page " + (i + 1) + " of " + pageCount);
+        tiles.slice(i * perPage, (i + 1) * perPage).forEach(t => page.appendChild(t));
+        pager.appendChild(page);
+    }
+
+    const dots = document.createElement("div");
+    dots.className = "dots";
+    dots.id = "dots";
+    for (let i = 0; i < pageCount; i++) {
+        const dot = document.createElement("button");
+        dot.type = "button";
+        dot.className = "dot";
+        dot.setAttribute("aria-label", "Go to apps page " + (i + 1));
+        dot.addEventListener("click", () => {
+            pager.scrollTo({ left: pager.clientWidth * i, behavior: "smooth" });
+        });
+        dots.appendChild(dot);
+    }
+
+    grid.hidden = true;
+    grid.after(pager);
+    pager.after(dots);
+
+    const markActive = () => {
+        const i = Math.round(pager.scrollLeft / Math.max(1, pager.clientWidth));
+        buildPager.index = i;
+        Array.from(dots.children).forEach((d, n) => {
+            d.setAttribute("aria-current", n === i ? "true" : "false");
+        });
+    };
+    pager.addEventListener("scroll", () => {
+        window.clearTimeout(buildPager.scrollTimer);
+        buildPager.scrollTimer = window.setTimeout(markActive, 60);
+    });
+
+    // Stay on the page the viewer was looking at across a rebuild.
+    const target = Math.min(previous, pageCount - 1);
+    pager.scrollLeft = pager.clientWidth * target;
+    markActive();
+}
+
+function teardownPager() {
+    const old = document.getElementById("pager");
+    const dots = document.getElementById("dots");
+    if (old) old.remove();
+    if (dots) dots.remove();
+}
+
+buildPager();
+
+let pagerResizeTimer;
+window.addEventListener("resize", function () {
+    window.clearTimeout(pagerResizeTimer);
+    pagerResizeTimer = window.setTimeout(buildPager, 150);
+});
