@@ -1,7 +1,3 @@
-function changeMessage() {
-    document.getElementById('message').textContent = "Updated at " + new Date().toLocaleTimeString();
-}
-
 const LOCATIONS = [
     { name: "Hamilton", lat: 40.22, lon: -74.65, prefix: "ham" },
     { name: "New York", lat: 40.7128, lon: -74.0060, prefix: "nyc" },
@@ -76,11 +72,6 @@ function loadAllWeather() {
 loadAllWeather();
 setInterval(loadAllWeather, 10 * 60 * 1000);
 
-function openPadEdit() {
-    const name = prompt('Pad name to edit?');
-    if (name) location.href = '/notes/p/' + encodeURIComponent(name);
-}
-
 const WMO_ICON = [
     [0, "bi-brightness-high"],              // clear
     [[1, 2, 3], "bi-cloud-sun"],            // partly cloudy
@@ -125,3 +116,26 @@ function humidityCategory(rh) {
     return "Very humid";
 }
 
+// --- header clock -----------------------------------------------------------
+function greetingFor(hour) {
+    if (hour < 5) return "Good night";
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    if (hour < 21) return "Good evening";
+    return "Good night";
+}
+
+function tickClock() {
+    const now = new Date();
+    const clock = document.getElementById("clock");
+    const today = document.getElementById("today");
+    const greeting = document.getElementById("greeting");
+    if (!clock) return;
+
+    clock.textContent = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    today.textContent = now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+    greeting.textContent = greetingFor(now.getHours());
+}
+
+tickClock();
+setInterval(tickClock, 10 * 1000);

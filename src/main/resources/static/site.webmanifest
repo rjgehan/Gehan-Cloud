@@ -1,0 +1,18 @@
+{
+  "name": "Gehan Cloud",
+  "short_name": "Gehan",
+  "description": "One place to reach everything at home.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d3d10",
+  "theme_color": "#12581a",
+  "icons": [
+    { "src": "/favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/apple-touch-icon-120x120.png", "sizes": "120x120", "type": "image/png" },
+    { "src": "/apple-touch-icon-152x152.png", "sizes": "152x152", "type": "image/png" },
+    { "src": "/apple-touch-icon-167x167.png", "sizes": "167x167", "type": "image/png" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

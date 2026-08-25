@@ -1,0 +1,415 @@
+/* ===========================================================================
+   Gehan Cloud portal.
+   Mobile-first: a phone-sized column of labelled app tiles, like a home screen.
+   On wider screens the column widens to more tiles rather than stretching the
+   old fixed-position 120vw layout, which is what made big screens look broken.
+   =========================================================================== */
+
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap");
+
+:root {
+    --tile: 68px;
+    --radius-tile: 23%;
+    --col: 420px;
+    --text: #ffffff;
+    --text-dim: rgba(255, 255, 255, .72);
+    --glass: rgba(255, 255, 255, .12);
+    --glass-line: rgba(255, 255, 255, .22);
+    --shadow-tile: 0 6px 14px rgba(0, 0, 0, .3);
+    --shadow-card: 0 10px 26px rgba(0, 0, 0, .3);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    height: 100%;
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    min-height: 100%;
+    min-height: 100dvh;
+    font-family: "Poppins", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--text);
+    background: #0d3d10;
+    padding: max(18px, env(safe-area-inset-top)) 16px
+             calc(28px + env(safe-area-inset-bottom));
+    overflow-x: hidden;
+}
+
+/* --- animated backdrop (kept from the original design) --------------------- */
+.bg {
+    animation: slide 3s ease-in-out infinite alternate;
+    background-image: linear-gradient(-60deg, rgb(44, 102, 18) 50%, rgb(1, 56, 1) 50%);
+    bottom: 0;
+    left: -50%;
+    opacity: .5;
+    position: fixed;
+    right: -50%;
+    top: 0;
+    z-index: -1;
+}
+
+.bg2 {
+    animation-direction: alternate-reverse;
+    animation-duration: 4s;
+}
+
+.bg3 {
+    animation-duration: 5s;
+}
+
+@keyframes slide {
+    0%   { transform: translateX(-25%); }
+    100% { transform: translateX(25%); }
+}
+
+/* --- shared column width -------------------------------------------------- */
+.screen > * {
+    max-width: var(--col);
+    margin-inline: auto;
+}
+
+/* --- top bar -------------------------------------------------------------- */
+.topbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 26px;
+}
+
+.greeting {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-dim);
+    letter-spacing: .01em;
+}
+
+.clock {
+    font-size: 34px;
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+.today {
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+.topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 4px;
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 36px;
+    padding: 0 13px;
+    border: 1px solid var(--glass-line);
+    border-radius: 999px;
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background .15s ease, transform .15s ease;
+}
+
+.chip:hover {
+    background: rgba(255, 255, 255, .22);
+}
+
+.chip:active {
+    transform: scale(.96);
+}
+
+.chip i {
+    font-size: 15px;
+}
+
+/* --- section headings ----------------------------------------------------- */
+.section-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    padding-left: 4px;
+}
+
+/* --- app grid ------------------------------------------------------------- */
+.apps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 22px 10px;
+    margin-bottom: 34px;
+}
+
+.app {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    color: var(--text);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.app-icon {
+    width: 100%;
+    max-width: var(--tile);
+    aspect-ratio: 1;
+    border-radius: var(--radius-tile);
+    display: grid;
+    place-items: center;
+    font-size: calc(var(--tile) * .42);
+    color: #fff;
+    background-image: linear-gradient(160deg, var(--a1), var(--a2));
+    box-shadow: var(--shadow-tile), inset 0 1px 0 rgba(255, 255, 255, .3);
+    transition: transform .16s cubic-bezier(.3, 1.4, .5, 1), box-shadow .16s ease;
+}
+
+.app-label {
+    font-size: 12px;
+    font-weight: 500;
+    text-align: center;
+    line-height: 1.25;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .6);
+}
+
+.app:hover .app-icon {
+    transform: translateY(-3px) scale(1.03);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, .34), inset 0 1px 0 rgba(255, 255, 255, .3);
+}
+
+.app:active .app-icon {
+    transform: scale(.93);
+}
+
+.app:focus-visible {
+    outline: none;
+}
+
+.app:focus-visible .app-icon {
+    outline: 3px solid #fff;
+    outline-offset: 3px;
+}
+
+/* Per-app colours: on a launch pad, colour is what the eye finds first.
+   Change the two stops to recolour an app. */
+.a-photos  { --a1: #a06bff; --a2: #6435c9; }
+.a-grocery { --a1: #ffb648; --a2: #e07a12; }
+.a-home    { --a1: #35c8d8; --a2: #0f8a9c; }
+.a-tools   { --a1: #5aa9ff; --a2: #1f66c4; }
+.a-takeout { --a1: #ff7a72; --a2: #d1372e; }
+.a-maps    { --a1: #57cc72; --a2: #1f8a3e; }
+.a-users   { --a1: #9aa7b2; --a2: #4d5b68; }
+
+/* --- weather widgets ------------------------------------------------------ */
+.widgets {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.wx {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 22px;
+    overflow: hidden;
+    padding: 13px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background-size: cover;
+    background-position: center;
+    background-color: #24402a;
+    box-shadow: var(--shadow-card);
+}
+
+/* Readability wash over the photo. Night cards get a cooler, deeper one, which
+   also means a card without a night photo still reads as night. */
+.wx::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom,
+            rgba(0, 0, 0, .12) 0%,
+            rgba(0, 0, 0, .34) 48%,
+            rgba(0, 0, 0, .68) 100%);
+}
+
+.wx.night::after {
+    background: linear-gradient(to bottom,
+            rgba(6, 16, 42, .48) 0%,
+            rgba(4, 12, 34, .66) 48%,
+            rgba(2, 8, 24, .82) 100%);
+}
+
+.wx > * {
+    position: relative;
+    z-index: 1;
+}
+
+.wx-place {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .01em;
+}
+
+.wx-mid {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.wx-temp {
+    font-size: clamp(26px, 8vw, 34px);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+.w-mainico {
+    font-size: clamp(20px, 6vw, 26px);
+    line-height: 1;
+    opacity: .95;
+}
+
+.wx-meta {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, .88);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 7px;
+}
+
+.wx-meta .dot {
+    display: none;
+    opacity: .5;
+}
+
+.wx-place,
+.wx-temp,
+.wx-meta,
+.w-mainico {
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .85), 0 0 10px rgba(0, 0, 0, .55);
+}
+
+/* Photo backgrounds */
+.bg-ham { background-image: url("/weatherImages/hamilton.JPG"); }
+.bg-ham.night { background-image: url("/weatherImages/hamilton-night.jpg"); }
+.bg-nyc { background-image: url("/weatherImages/newyork.jpeg"); }
+.bg-nyc.night { background-image: url("/weatherImages/newyork-night.jpeg"); }
+.bg-ash { background-image: url("/weatherImages/ashburn.png"); }
+.bg-ash.night { background-image: url("/weatherImages/ashburn-night.jpg"); }
+/* No night photo for this one: the browser cannot decode the .heic that used to
+   be referenced here, so the night wash above carries it. Drop in a .jpg and add
+   a .bg-man.night rule if you want a separate night shot. */
+.bg-man { background-image: url("/weatherImages/ocean-city.webp"); }
+
+/* --- wider screens: more columns, never a stretched layout ---------------- */
+@media (min-width: 700px) {
+    :root {
+        --tile: 84px;
+        --col: 720px;
+    }
+
+    /* Vertically centre the content. margin-block:auto (rather than
+       align-items:center) so a tall page still scrolls without clipping. */
+    body {
+        display: flex;
+        flex-direction: column;
+        padding-top: 34px;
+    }
+
+    .screen {
+        width: 100%;
+        margin-block: auto;
+    }
+
+    /* Fixed-width tracks + centred justification keeps the row centred whether
+       there are six apps or seven (the Users tile is admin-only). */
+    .apps {
+        grid-template-columns: repeat(auto-fit, 88px);
+        justify-content: center;
+        gap: 26px 14px;
+        margin-bottom: 42px;
+    }
+
+    .widgets {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+    }
+
+    .app-label { font-size: 12.5px; }
+
+    .clock { font-size: 40px; }
+}
+
+@media (min-width: 1040px) {
+    :root {
+        --tile: 96px;
+        --col: 940px;
+    }
+
+    body { padding-top: 48px; }
+
+    .apps {
+        grid-template-columns: repeat(auto-fit, 104px);
+        gap: 30px 16px;
+    }
+
+    .wx-meta .dot { display: inline; }
+
+    .widgets { gap: 18px; }
+
+    .wx {
+        padding: 16px;
+        border-radius: 26px;
+    }
+
+    .wx-place { font-size: 14.5px; }
+
+    .wx-meta { font-size: 12.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bg { animation: none; }
+
+    .app-icon,
+    .chip { transition: none; }
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
