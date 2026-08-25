@@ -292,10 +292,31 @@ No session is needed for this one: it is a question about where you are, not who
 you are. Chain it with `portal-auth` when you want both — `middlewares:
 [home-only, portal-auth]` requires being at home *and* signed in.
 
-`/__lan` uses the same `portal.trusted-networks` list as the tiles, which means it
-cannot yet tell one site from another: with a beach network in that list, being at
-the beach would also open a home-only hostname. Named network groups would fix
-that; nothing needs them today.
+`/__lan` uses the same `portal.trusted-networks` list as the tiles, so it cannot
+tell one site from another. Only one tile is network-gated today, so a single list
+is enough. The moment a second site needs its own gate — a tile that should work
+at home and a tile that should work at the beach — that list has to become named
+groups, or being at either site would unlock both.
+
+Nothing currently attaches this middleware; `home.gehan.cloud` is gated by login
+instead. It is kept because it is the right answer for a hostname that genuinely
+should not work away from one place.
+
+### Why the network list is safe to rely on here
+
+A list of addresses is a weak thing to protect a service with: it says where a
+request came from, not who sent it, it arrives in a header the proxy fills in, and
+home internet addresses rotate. All true — which is why nothing is protected by
+one here.
+
+The services these tiles point at are never published. They live at private
+addresses that do not route from anywhere else, so they cannot be reached from the
+internet whatever the launcher renders. The list decides only whether a tile looks
+live. Get it wrong and a tile is greyed when it should not be, or links somewhere
+that does not answer. Nobody gets in.
+
+Anything that does need protecting gets a login instead: its own, or this portal's
+through `/__auth`.
 
 **This is cosmetic, not a security boundary.** What keeps those services private
 is that their addresses do not route from the internet. `lanOnly` only stops the

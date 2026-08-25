@@ -29,12 +29,19 @@ portal:
       icon: bi-cart-fill
       color: amber
 
-    # Only routes on the home network. beach.gehan.cloud is deliberately absent
-    # until its access rules are settled.
+    # Published through Traefik and gated by this portal's login, because the
+    # dashboard has none of its own. Works anywhere once you are signed in.
     - label: Home
       url: https://home.gehan.cloud/dashboard/
       icon: bi-house-door-fill
       color: teal
+
+    # Never published. The link is the address on the beach network itself, so it
+    # only resolves while you are on that wifi. VERIFY 192.168.1.23 is right.
+    - label: Beach
+      url: http://192.168.1.23:8080
+      icon: bi-umbrella-fill
+      color: cyan
       lanOnly: true
 
     - label: Users
