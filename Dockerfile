@@ -5,7 +5,7 @@
 # architecture-independent, so the same build output ships to every target arch
 # and only the JRE base image below differs. Without this pin, an arm64 target
 # would run the whole Maven build under QEMU emulation.
-FROM --platform=$BUILDPLATFORM eclipse-temurin:21-jdk-noble AS build
+FROM --platform=$BUILDPLATFORM eclipse-temurin:25-jdk-noble AS build
 WORKDIR /build
 
 # Resolve dependencies in their own layer so code-only changes reuse the cache.
@@ -25,7 +25,7 @@ WORKDIR /build/target
 RUN java -Djarmode=tools -jar app.jar extract --layers --destination extracted
 
 # --- Stage 2: runtime --------------------------------------------------------
-FROM eclipse-temurin:21-jre-noble AS runtime
+FROM eclipse-temurin:25-jre-noble AS runtime
 
 LABEL org.opencontainers.image.title="Gehan Cloud" \
       org.opencontainers.image.description="Self-hosted personal cloud portal built with Spring Boot" \
