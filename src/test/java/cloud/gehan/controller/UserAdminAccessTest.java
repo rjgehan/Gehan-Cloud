@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.authenticated;
 import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.unauthenticated;
@@ -57,7 +58,7 @@ class UserAdminAccessTest {
     @Test
     void nonAdminCannotCreateUsers() throws Exception {
         mvc.perform(post("/users").param("username", "Sneaky").param("role", "ADMIN")
-                        .with(user("Jen").roles("USER")))
+                        .with(user("Jen").roles("USER")).with(csrf()))
                 .andExpect(status().isForbidden());
 
         assertThat(users.existsByUsernameIgnoreCase("Sneaky")).isFalse();
@@ -72,7 +73,7 @@ class UserAdminAccessTest {
     @Test
     void adminCreatesAUserThroughTheForm() throws Exception {
         mvc.perform(post("/users").param("username", "Colleen").param("role", "USER")
-                        .with(user("admin").roles("ADMIN")))
+                        .with(user("admin").roles("ADMIN")).with(csrf()))
                 .andExpect(status().is3xxRedirection());
 
         assertThat(users.findByUsername("Colleen").orElseThrow().isUnclaimed()).isTrue();
@@ -102,7 +103,7 @@ class UserAdminAccessTest {
                 .andExpect(authenticated());
 
         long id = users.findByUsername("Colleen").orElseThrow().getId();
-        mvc.perform(post("/users/" + id + "/reset").with(user("admin").roles("ADMIN")))
+        mvc.perform(post("/users/" + id + "/reset").with(user("admin").roles("ADMIN")).with(csrf()))
                 .andExpect(status().is3xxRedirection());
 
         mvc.perform(formLogin().user("Colleen").password("secondChoice"))
@@ -118,6 +119,30 @@ class UserAdminAccessTest {
         mvc.perform(formLogin().user("Ghost").password("anything"))
                 .andExpect(unauthenticated());
         assertThat(users.existsByUsernameIgnoreCase("Ghost")).isFalse();
+    }
+
+    /**
+     * Without a token an admin's own browser could be made to submit this from another
+     * site. These four are every state-changing route in the app.
+     */
+    @Test
+    void adminActionsAreRejectedWithoutACsrfToken() throws Exception {
+        userService.create("Victim", UserService.ROLE_USER);
+        long id = users.findByUsername("Victim").orElseThrow().getId();
+
+        mvc.perform(post("/users").param("username", "Injected").param("role", "ADMIN")
+                        .with(user("admin").roles("ADMIN")))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/users/" + id + "/delete").with(user("admin").roles("ADMIN")))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/users/" + id + "/reset").with(user("admin").roles("ADMIN")))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/users/" + id + "/role").param("role", "ADMIN")
+                        .with(user("admin").roles("ADMIN")))
+                .andExpect(status().isForbidden());
+
+        assertThat(users.existsByUsernameIgnoreCase("Injected")).isFalse();
+        assertThat(users.findByUsername("Victim")).isPresent();
     }
 
     @Test

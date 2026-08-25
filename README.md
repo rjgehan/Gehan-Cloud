@@ -192,7 +192,7 @@ http:
     plex:
       loadBalancer:
         servers:
-          - url: "http://100.101.102.103:8080"    # the device's Tailscale IP
+          - url: "http://100.64.0.10:8080"    # the device's Tailscale IP
 ```
 
 `GET /__auth` answers that middleware. A signed-in visitor gets 200 and the
@@ -285,7 +285,7 @@ http:
     thing:
       loadBalancer:
         servers:
-          - url: "http://100.86.236.12:8088"
+          - url: "http://100.64.0.10:8088"
 ```
 
 No session is needed for this one: it is a question about where you are, not who
@@ -314,7 +314,7 @@ either house would unlock both. Pointing both houses at one address turns the
 question into "am I in one of my houses?", which one list answers:
 
 ```properties
-TRUSTED_NETWORKS=65.84.61.185/32,<home public address>/32
+TRUSTED_NETWORKS=<beach public address>/32,<home public address>/32
 ```
 
 It costs some uniformity. Both boxes have to answer on the same address and port,
@@ -373,6 +373,43 @@ them to do it promptly.
 **Guards against locking yourself out:** you cannot delete your own account,
 cannot remove your own admin role, and the last remaining admin can be neither
 deleted nor demoted.
+
+## Security
+
+Every route is a page behind a session; there is no API surface and no token to
+leak. What that leaves:
+
+| | |
+| --- | --- |
+| Passwords | BCrypt. Never stored or logged in the clear. |
+| CSRF | On. Every state-changing route is a form and carries a token. |
+| Session cookie | `Secure`, `HttpOnly`, `SameSite=Lax`, rotated on login. |
+| Headers | CSP with `script-src 'self'`, plus HSTS, `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`. |
+| Redirects | The `continue` parameter is validated against `BASE_DOMAIN`; off-domain targets are dropped. |
+| Errors | No stack traces or internal messages returned to clients. |
+| Container | Runs as a non-root user. Devtools is excluded from the packaged jar. |
+
+### Known limitations
+
+These are deliberate, and worth knowing before you deploy this yourself.
+
+**An unclaimed account can be claimed by anyone who knows the username.** That is
+how first-login password setting works, and this repo being public means the
+mechanism is public too. Create accounts when the person is ready to use them.
+The same applies to the admin account created on an empty database — sign in as
+it immediately.
+
+**Nothing rate-limits the login.** There is no lockout, delay, or captcha, so an
+exposed instance can be guessed at as fast as the network allows. Put a rate limit
+in the reverse proxy if that matters to you.
+
+**`lanOnly` and `/__lan` are presentation, not access control.** They read an
+address from a header the proxy sets. What actually keeps those services private
+is that they are not published. Do not let a proxy trust client-supplied
+forwarding headers — in Traefik, leave `forwardedHeaders.insecure` off.
+
+**No automated dependency updates.** Dependabot is not enabled on this repo.
+
 
 ## Deployment
 

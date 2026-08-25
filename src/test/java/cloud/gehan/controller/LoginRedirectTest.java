@@ -10,6 +10,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.authenticated;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
@@ -36,7 +37,8 @@ class LoginRedirectTest {
 
     /** Posts the login form exactly as the template does, hidden field included. */
     private org.springframework.test.web.servlet.ResultActions signIn(String continueTo) throws Exception {
-        var request = post("/login").param("username", "Jen").param("password", "first-login");
+        var request = post("/login").with(csrf())
+                .param("username", "Jen").param("password", "first-login");
         if (continueTo != null) {
             request = request.param("continue", continueTo);
         }

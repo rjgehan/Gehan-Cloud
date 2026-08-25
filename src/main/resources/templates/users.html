@@ -36,7 +36,7 @@
             <h2>Add a user</h2>
             <p class="hint">New accounts start with no password. The first password typed at
                 login becomes theirs.</p>
-            <form class="new-user" method="post" action="/users">
+            <form class="new-user" method="post" th:action="@{/users}">
                 <input type="text" name="username" placeholder="Username" required
                        pattern="[A-Za-z0-9._\-]{2,32}"
                        title="2-32 characters: letters, numbers, dot, dash, underscore">
@@ -81,13 +81,13 @@
                             </form>
                             <form method="post" th:action="@{'/users/' + ${u.id} + '/reset'}">
                                 <button type="submit" class="ghost"
-                                        th:attr="onclick=|return confirm('Reset the password for ${u.username}? They will set a new one at next login.')|">
+                                        th:attr="data-confirm=|Reset the password for ${u.username}? They will set a new one at next login.|">
                                     Reset password
                                 </button>
                             </form>
                             <form method="post" th:action="@{'/users/' + ${u.id} + '/delete'}">
                                 <button type="submit" class="danger"
-                                        th:attr="onclick=|return confirm('Delete ${u.username}? This cannot be undone.')|">
+                                        th:attr="data-confirm=|Delete ${u.username}? This cannot be undone.|">
                                     Delete
                                 </button>
                             </form>
@@ -97,6 +97,7 @@
             </table>
         </section>
     </main>
+    <script src="/js/users.js"></script>
 </body>
 
 </html>

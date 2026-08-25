@@ -16,7 +16,7 @@
     <!-- login start -->
   <div class="wrapper">
     <div class="title"><span>Gehan.Cloud</span></div>
-    <form action="/login" method="post">
+    <form th:action="@{/login}" method="post">
       <!-- Where to go after signing in. Arrives as ?continue= when another service
            on the domain bounced you here; without this hidden field the POST would
            drop it and you would land on the portal instead. Validated server-side
