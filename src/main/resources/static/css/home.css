@@ -244,6 +244,7 @@ body {
 }
 
 .app-icon {
+    position: relative;
     width: 100%;
     max-width: var(--tile);
     aspect-ratio: 1;
@@ -255,6 +256,44 @@ body {
     background-image: linear-gradient(160deg, var(--a1), var(--a2));
     box-shadow: var(--shadow-tile), inset 0 1px 0 rgba(255, 255, 255, .3);
     transition: transform .16s cubic-bezier(.3, 1.4, .5, 1), box-shadow .16s ease;
+}
+
+/* A tile for a service only reachable on the host's network, seen from off it.
+   The anchor is rendered without an href so it is genuinely inert rather than
+   just looking that way: no click, no focus, no context menu offering to open it. */
+.app-off {
+    cursor: default;
+}
+
+.app-off .app-icon {
+    filter: grayscale(.85);
+    opacity: .45;
+    box-shadow: none;
+}
+
+.app-off .app-label {
+    opacity: .55;
+}
+
+.app-off:hover .app-icon {
+    transform: none;
+    box-shadow: none;
+}
+
+.app-lock {
+    position: absolute;
+    right: -3px;
+    bottom: -3px;
+    width: 44%;
+    max-width: 26px;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: #23331f;
+    color: rgba(255, 255, 255, .92);
+    font-size: 11px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .45);
 }
 
 .app-label {

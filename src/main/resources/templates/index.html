@@ -45,12 +45,18 @@
              pages with dots once it runs. -->
         <nav class="apps" id="apps" aria-label="Apps">
             <a class="app" th:each="app : ${apps}"
-               th:href="${app.url}"
-               th:title="${app.label}"
-               th:target="${app.external} ? '_blank' : null"
-               th:rel="${app.external} ? 'noopener' : null">
+               th:with="unreachable=${app.lanOnly and !onLan}"
+               th:classappend="${unreachable} ? 'app-off' : ''"
+               th:href="${unreachable} ? null : ${app.url}"
+               th:title="${unreachable} ? ${app.label} + ' — only reachable on the home network' : ${app.label}"
+               th:attr="aria-disabled=${unreachable} ? 'true' : null"
+               th:target="${app.external and !unreachable} ? '_blank' : null"
+               th:rel="${app.external and !unreachable} ? 'noopener' : null">
                 <span class="app-icon" th:classappend="'a-' + ${app.color}">
                     <i class="bi" th:classappend="${app.icon}" aria-hidden="true"></i>
+                    <span class="app-lock" th:if="${unreachable}" aria-hidden="true">
+                        <i class="bi bi-house-lock-fill"></i>
+                    </span>
                 </span>
                 <span class="app-label" th:text="${app.label}">App</span>
             </a>

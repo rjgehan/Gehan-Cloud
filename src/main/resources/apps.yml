@@ -11,6 +11,10 @@
 #   color      a palette from home.css: violet amber teal blue red green
 #              indigo pink cyan lime orange slate. Omitted means slate.
 #   adminOnly  true hides the tile from everyone who is not an admin.
+#   lanOnly    true for a service that only routes on the host's own network. The
+#              tile is always shown, but off that network it is greyed out and does
+#              not link anywhere, instead of hanging in a dead tab. Which networks
+#              count is portal.trusted-networks in application.properties.
 # =============================================================================
 portal:
   apps:
@@ -30,3 +34,10 @@ portal:
       icon: bi-people-fill
       color: slate
       adminOnly: true
+
+    # A service that only routes on the home network. Off it, this tile greys out.
+    # - label: NAS
+    #   url: http://192.168.1.50:5000
+    #   icon: bi-hdd-network-fill
+    #   color: cyan
+    #   lanOnly: true

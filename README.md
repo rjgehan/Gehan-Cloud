@@ -144,6 +144,7 @@ portal:
 | `icon` | Any [Bootstrap Icons](https://icons.getbootstrap.com) name. |
 | `color` | A palette from `home.css`: violet indigo blue cyan teal green lime amber orange red pink slate. Defaults to slate. |
 | `adminOnly` | `true` hides the tile from everyone who is not an admin. |
+| `lanOnly` | `true` for a service that only routes on the host network — see [Services that only work at home](#services-that-only-work-at-home). |
 
 Tiles fill a page and overflow onto the next one you swipe to, the way a phone
 home screen does, so there is no tile count to keep under. How many fit per page
@@ -221,6 +222,50 @@ Two environment variables are required for this, both in
 - **Tailscale ACLs** have to permit the server to reach that device and port.
 
 
+## Services that only work at home
+
+Some things should not be published at all — a NAS admin page, a router, a
+hypervisor. Those get a tile that links straight at the private address:
+
+```yaml
+    - label: NAS
+      url: http://192.168.1.50:5000
+      icon: bi-hdd-network-fill
+      color: cyan
+      lanOnly: true
+```
+
+The browser is what connects, not the server, so on the home network that link
+just works. From outside, the address does not route and the tab would hang.
+`lanOnly` prevents that: off the network the tile is greyed out, carries a small
+lock, and is rendered **without an href at all** — so there is nothing to click,
+focus, or copy out of the page, and the private address never appears in the HTML.
+
+Which networks count is `portal.trusted-networks`, defaulting to the private
+ranges:
+
+```properties
+portal.trusted-networks=${TRUSTED_NETWORKS:10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1/32,::1/128}
+```
+
+If the defaults do not match, sign in as an admin and open `/users` — it shows the
+address the app actually saw you arrive from. Set `TRUSTED_NETWORKS` to whatever
+that is. Two common cases need it:
+
+- **Hairpin NAT.** Visiting the public hostname from inside the house can make
+  every visitor arrive as one address, often the router's. Add it as a `/32`.
+- **Split-horizon DNS.** If local DNS points the hostname at the server's LAN
+  address, visitors keep their real LAN address and the defaults are fine.
+
+**This is cosmetic, not a security boundary.** What keeps those services private
+is that their addresses do not route from the internet. `lanOnly` only stops the
+launcher offering a link that cannot work. A visitor who forged an
+`X-Forwarded-For` header could make the tile appear, and would still not be able
+to reach the service. Keep your proxy from trusting client-supplied forwarding
+headers regardless — in Traefik that means leaving `forwardedHeaders.insecure`
+off.
+
+
 ## Account lifecycle
 
 Accounts are managed in the app, not in code. Sign in as an admin and the portal
@@ -270,7 +315,7 @@ src/main/java/cloud/gehan/
 ├── controller/   Home (launcher), Login, UserAdmin, AuthProbe
 ├── model/        User entity
 ├── repository/   Spring Data JPA
-├── security/     FirstLoginAuthenticationProvider, RedirectTargets
+├── security/     FirstLoginAuthenticationProvider, RedirectTargets, LocalNetwork
 └── service/      UserService — business rules and lockout guards
 
 src/main/resources/

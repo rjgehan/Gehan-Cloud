@@ -31,6 +31,21 @@ public class PortalProperties {
         this.baseDomain = baseDomain;
     }
 
+    /**
+     * Networks a visitor can be on and still reach services that are not published to
+     * the internet. Tiles marked lanOnly are live only for these, and inert otherwise.
+     */
+    private List<String> trustedNetworks = new ArrayList<>(List.of(
+            "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.1/32", "::1/128"));
+
+    public List<String> getTrustedNetworks() {
+        return trustedNetworks;
+    }
+
+    public void setTrustedNetworks(List<String> trustedNetworks) {
+        this.trustedNetworks = trustedNetworks;
+    }
+
     public List<AppLink> getApps() {
         return apps;
     }
@@ -53,6 +68,7 @@ public class PortalProperties {
         private String icon = "bi-box-arrow-up-right";
         private String color = "slate";
         private boolean adminOnly;
+        private boolean lanOnly;
 
         public String getLabel() {
             return label;
@@ -92,6 +108,19 @@ public class PortalProperties {
 
         public void setAdminOnly(boolean adminOnly) {
             this.adminOnly = adminOnly;
+        }
+
+        /**
+         * True for a service that is only routable from the host's own network. The
+         * tile is shown to everyone but only links anywhere for a visitor on that
+         * network, so nobody is left clicking a link that quietly times out.
+         */
+        public boolean isLanOnly() {
+            return lanOnly;
+        }
+
+        public void setLanOnly(boolean lanOnly) {
+            this.lanOnly = lanOnly;
         }
 
         /** True when the link leaves this app, so those tiles can open in a new tab. */

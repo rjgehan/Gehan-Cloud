@@ -19,7 +19,14 @@
         <header class="page-head">
             <a class="back" href="/" aria-label="Back to portal"><i class="bi bi-arrow-left"></i></a>
             <h1>Users</h1>
-            <span class="whoami" th:text="'Signed in as ' + ${currentUsername}">Signed in as admin</span>
+            <span class="whoami">
+                <span th:text="'Signed in as ' + ${currentUsername}">Signed in as admin</span>
+                <span class="whoami-net">
+                    from <code th:text="${clientIp}">0.0.0.0</code>
+                    <span th:if="${clientOnLan}">&middot; home network</span>
+                    <span th:unless="${clientOnLan}">&middot; outside</span>
+                </span>
+            </span>
         </header>
 
         <div class="banner ok" th:if="${message}" th:text="${message}"></div>

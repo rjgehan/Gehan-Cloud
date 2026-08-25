@@ -84,6 +84,19 @@ body {
 .whoami {
     font-size: 14px;
     opacity: .85;
+    text-align: right;
+}
+
+/* What the app sees as the visitor's address, so portal.trusted-networks can be
+   set from fact rather than from a guess about NAT and proxy rewriting. */
+.whoami-net {
+    display: block;
+    font-size: 12px;
+    opacity: .75;
+}
+
+.whoami-net code {
+    font-family: ui-monospace, Consolas, monospace;
 }
 
 .banner {

@@ -1,6 +1,8 @@
 package cloud.gehan.controller;
 
+import cloud.gehan.security.LocalNetwork;
 import cloud.gehan.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -17,15 +19,21 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 public class UserAdminController {
 
     private final UserService userService;
+    private final LocalNetwork localNetwork;
 
-    public UserAdminController(UserService userService) {
+    public UserAdminController(UserService userService, LocalNetwork localNetwork) {
         this.userService = userService;
+        this.localNetwork = localNetwork;
     }
 
     @GetMapping
-    public String page(Model model, Authentication authentication) {
+    public String page(Model model, Authentication authentication, HttpServletRequest request) {
         model.addAttribute("users", userService.list());
         model.addAttribute("currentUsername", authentication.getName());
+        // Shown so portal.trusted-networks can be set from what the app actually sees,
+        // rather than from a guess about how the proxy and NAT rewrite things.
+        model.addAttribute("clientIp", request.getRemoteAddr());
+        model.addAttribute("clientOnLan", localNetwork.includes(request.getRemoteAddr()));
         return "users";
     }
 
