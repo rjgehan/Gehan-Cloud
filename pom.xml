@@ -12,7 +12,7 @@
 	<artifactId>gehan-cloud</artifactId>
 	<version>1.0.0</version>
 	<name>Gehan Cloud</name>
-	<description>Self-hosted personal cloud portal: form login, role-based user administration, JWT-protected APIs, and a shared grocery list.</description>
+	<description>Self-hosted launcher for gehan.cloud: form login, role-based user administration, and a configurable tile page.</description>
 	<url>https://github.com/rjgehan/Gehan-Cloud</url>
 	<licenses>
 		<license>
@@ -61,26 +61,9 @@
 			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>io.jsonwebtoken</groupId>
-			<artifactId>jjwt-api</artifactId>
-			<version>0.11.5</version>
-		</dependency>
-		<dependency>
 			<groupId>com.h2database</groupId>
 			<artifactId>h2</artifactId>
 			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>io.jsonwebtoken</groupId>
-			<artifactId>jjwt-impl</artifactId>
-			<version>0.11.5</version>
-			<scope>runtime</scope>
-		</dependency>
-		<dependency>
-			<groupId>io.jsonwebtoken</groupId>
-			<artifactId>jjwt-jackson</artifactId>
-			<version>0.11.5</version>
-			<scope>runtime</scope>
 		</dependency>
 
 		<dependency>

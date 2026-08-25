@@ -50,7 +50,7 @@ COPY --from=build /build/target/extracted/spring-boot-loader/ ./
 COPY --from=build /build/target/extracted/snapshot-dependencies/ ./
 COPY --from=build /build/target/extracted/application/ ./
 
-# SQLite file and grocery.json live here; mount a volume to keep them across deploys.
+# The SQLite file lives here; mount a volume to keep it across deploys.
 RUN mkdir -p /data && chown -R app:app /data /app
 VOLUME ["/data"]
 ENV APP_DATA_DIR=/data

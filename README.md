@@ -6,10 +6,10 @@
 [![Spring Boot 3.5](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F)](https://spring.io/projects/spring-boot)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A self-hosted personal cloud portal, running in production at
-[gehan.cloud](https://gehan.cloud). Spring Boot serves a launcher page, an
-admin-only user management console, a shared grocery list API, and a share
-endpoint that an iOS Shortcut posts links to.
+A self-hosted launcher for the services running at
+[gehan.cloud](https://gehan.cloud): one page the family can remember, with a
+tile for everything else. Spring Boot serves the launcher, form login, and an
+admin-only user management console. That is the whole app.
 
 It ships as a container: every push to `main` builds an image, publishes it to
 GitHub Container Registry, and Watchtower on the server pulls and restarts.
@@ -35,14 +35,16 @@ own account, strip your own admin role, or remove the last remaining admin.
 Those checks sit in `UserService` and are covered by unit tests, rather than
 being enforced by hiding buttons in a template.
 
-**Two authentication schemes, one app.** Browser traffic uses session-based form
-login; `/api/**` accepts a bearer token from `POST /auth/login`. A separate
-shared-secret filter guards the one write endpoint an iOS Shortcut hits, and it
-fails closed: if the secret was never configured, the endpoint returns 503
-rather than accepting anything.
+**The tile list is configuration, not markup.** The launcher renders from
+[`apps.yml`](src/main/resources/apps.yml), so adding a service is one entry
+rather than a template edit. Tiles fill a page and overflow onto the next one
+you swipe to, the way a phone home screen does, and the page size is derived
+from the CSS breakpoint rather than hard-coded — so it re-pages itself instead
+of having a tile budget to stay under.
 
-**`GET /__auth`** exists so Nginx's `auth_request` directive can gate *other*
-services on the same box behind this app's session cookie.
+**The launcher degrades without JavaScript.** The pager is an enhancement layered
+over a plain grid the server already rendered; with scripting off the tiles stay
+one grid and every link still works.
 
 ## Stack
 
@@ -50,19 +52,19 @@ services on the same box behind this app's session cookie.
 | --- | --- |
 | Language / runtime | Java 21 |
 | Framework | Spring Boot 3.5 (Web, Security, Data JPA, Thymeleaf) |
-| Storage | SQLite for users, JSON file for the grocery list |
-| Auth | Session form login + JWT (jjwt), BCrypt hashing |
+| Storage | SQLite, one table of users |
+| Auth | Session form login, BCrypt hashing |
 | Container | Multi-stage Docker build, layered Spring Boot jar, multi-arch |
 | CI/CD | GitHub Actions to GHCR, Watchtower on the server |
 
 ## Architecture
 
 ```
-        browser                iOS Shortcut
-           |                        |
-           v                        v
+                    browser
+                       |
+                       v
       +------------------------------------+
-      |  Nginx (TLS, reverse proxy)        |
+      |  Traefik (TLS, reverse proxy)      |
       +----------------+-------------------+
                        v
       +------------------------------------+
@@ -70,26 +72,26 @@ services on the same box behind this app's session cookie.
       |                                    |
       |  FirstLoginAuthenticationProvider  |  claims unclaimed accounts
       |  DaoAuthenticationProvider         |  normal BCrypt check
-      |  JwtFilter        -> /api/**       |  bearer tokens
-      |  ApiKeyFilter     -> /api/share    |  shared secret, fails closed
-      +-------+--------------------+-------+
-              v                    v
-        users.db (SQLite)     grocery.json
+      |                                    |
+      |  /        launcher, from apps.yml  |
+      |  /login   form login               |
+      |  /users   admin console            |
+      +------------------+-----------------+
+                         v
+                  users.db (SQLite)
 ```
 
 ## Endpoints
 
 | Method | Path | Access | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/` | authenticated | Portal launcher |
+| `GET` | `/` | authenticated | The launcher |
 | `GET` | `/login` | public | Form login, also claims unclaimed accounts |
-| `GET` | `/__auth` | public | Session probe for Nginx `auth_request` |
-| `POST` | `/auth/login` | public | Exchange credentials for a bearer token |
+| `POST` | `/logout` | authenticated | Sign out |
 | `GET` | `/users` | `ADMIN` | User management console |
 | `POST` | `/users`, `/users/{id}/delete`, `/{id}/reset`, `/{id}/role` | `ADMIN` | Create, delete, reset password, change role |
-| `GET` / `POST` | `/api/grocery/**` | public | Shared list and pantry state |
-| `POST` | `/api/share` | `key` header | Receive a shared link |
-| `GET` | `/api/share/latest` | bearer token | Read the most recent link |
+
+That is every route. There is no API surface.
 
 ## Running locally
 
@@ -107,19 +109,16 @@ Requires JDK 21. Maven is not needed, the wrapper is bundled.
 ./mvnw clean package
 ```
 
-Tests run against in-memory H2 and a throwaway JSON file, so they never touch a
-real `users.db` or `grocery.json`.
+Tests run against in-memory H2, so they never touch a real `users.db`.
 
 ### Configuration
 
-Every secret comes from the environment; nothing sensitive lives in
-`application.properties`. See [`.env.example`](.env.example).
+Nothing sensitive lives in `application.properties`. See
+[`.env.example`](.env.example).
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `SHARE_KEY` | *(unset)* | Shared secret for `POST /api/share`. Unset means the endpoint returns 503. |
-| `JWT_SECRET` | *(unset)* | Bearer-token signing key, 32+ characters. Unset means a random key per boot, so tokens die on restart. |
-| `APP_DATA_DIR` | `.` | Directory holding `users.db` and `grocery.json`. The container sets it to `/data`. |
+| `APP_DATA_DIR` | `.` | Directory holding `users.db`. The container sets it to `/data`. |
 | `APP_BOOTSTRAP_ADMIN` | `admin` | Username created when the database is empty. |
 | `LOG_LEVEL` / `APP_LOG_LEVEL` | `INFO` | Root and application log levels. |
 
@@ -190,20 +189,19 @@ only the JRE base layer differs and nothing is built under emulation.
 
 The server pulls that tag; there is no SSH step, no deploy key, and nothing
 inbound to the server. The container reads its configuration from the
-environment ([`.env.example`](.env.example)) and keeps `users.db` and
-`grocery.json` in `/data`, so mount a volume there to persist them across
-redeploys.
+environment ([`.env.example`](.env.example)) and keeps `users.db` in `/data`,
+so mount a volume there to persist it across redeploys.
 
 ## Repository layout
 
 ```
 src/main/java/cloud/gehan/
 ├── config/       SecurityConfig, AdminBootstrap, PortalProperties
-├── controller/   HTTP endpoints
-├── model/        User entity, grocery records
+├── controller/   Home (launcher), Login, UserAdmin
+├── model/        User entity
 ├── repository/   Spring Data JPA
-├── security/     FirstLoginAuthenticationProvider, JwtUtil, ApiKeyFilter
-└── service/      UserService, GroceryService — business rules and lockout guards
+├── security/     FirstLoginAuthenticationProvider
+└── service/      UserService — business rules and lockout guards
 
 src/main/resources/
 ├── apps.yml      the portal tile list — add services here
