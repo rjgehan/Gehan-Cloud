@@ -98,12 +98,11 @@ public SecurityFilterChain filterChain(HttpSecurity http, AuthenticationManager 
                 "/login", "/__auth", "/api/grocery/**",
                 "/auth/login",               // issues API bearer tokens; must be reachable anonymously
                 "/api/share",
-                "/error", "/error/**",        // <-- add these
-                "/style.css", "/indexjs.js",
-                "/favicon.ico",
+                "/error", "/error/**",
+                "/indexjs.js",
+                "/favicon.ico", "/favicon-*.png",
                 "/apple-touch-icon.png", "/apple-touch-icon-*.png",
                 "/site.webmanifest", "/robots.txt",
-                "/hamilton.jpeg", "/ashburn.png", "/manasquan.jpeg", "/newyork.jpeg",
                 "/css/**", "/js/**", "/images/**", "/fonts/**", "/webjars/**"
             ).permitAll()
             // User administration

@@ -25,36 +25,8 @@ portal:
       icon: bi-cart-fill
       color: amber
 
-    - label: Home
-      url: https://ha.gehan.cloud
-      icon: bi-house-door-fill
-      color: teal
-
-    - label: Tools
-      url: /pages/ashburn.html
-      icon: bi-tools
-      color: blue
-
-    - label: Takeout
-      url: /pages/ashburnTakeout.html
-      icon: bi-bag-fill
-      color: red
-
-    - label: Maps
-      url: /pages/maps.html
-      icon: bi-map-fill
-      color: green
-
     - label: Users
       url: /users
       icon: bi-people-fill
-      color: slate
-      adminOnly: true
-
-    # Temporary: the index of every page in the app, for the cleanup pass.
-    # Delete this entry and static/pages/all-links.html when you are done.
-    - label: All Links
-      url: /pages/all-links.html
-      icon: bi-list-ul
       color: slate
       adminOnly: true

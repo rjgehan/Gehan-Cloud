@@ -26,9 +26,10 @@ function codeToDesc(code) {
 }
 
 async function loadWeatherFor(location) {
+    // is_day comes straight from the API for this location, so day/night needs no
+    // clock or timezone handling on our side.
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${location.lat}&longitude=${location.lon}` +
-            `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m` +
-            `&daily=sunrise,sunset` +
+            `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day` +
             `&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FNew_York`;
 
     try {
@@ -36,23 +37,13 @@ async function loadWeatherFor(location) {
         const data = await res.json();
         const c = data.current;
 
-        const now = new Date();
-const sunrise = new Date(data.daily.sunrise[0]);
-const sunset  = new Date(data.daily.sunset[0]);
+        const isNight = c.is_day === 0;
 
-const isNight = (now < sunrise || now > sunset);
+        const card = document.querySelector(`.flex-weather.bg-${location.prefix}`);
+        card.classList.toggle("night", isNight);
 
-const card = document.querySelector(`.flex-weather.bg-${location.prefix}`);
-if (isNight) {
-  card.classList.add("night");
-} else {
-  card.classList.remove("night");
-}
-
-
-
-        document.getElementById(`${location.prefix}-desc`).innerHTML = 
-    `<i class="bi ${codeToIcon(c.weather_code, isNight)} w-mainico"></i>`;
+        document.getElementById(`${location.prefix}-desc`).innerHTML =
+            `<i class="bi ${codeToIcon(c.weather_code, isNight)} w-mainico"></i>`;
 
 
         document.getElementById(`${location.prefix}-temp`).textContent = `${Math.round(c.temperature_2m)}°F`;

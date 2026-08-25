@@ -402,10 +402,8 @@ body {
 .bg-nyc.night { background-image: url("/weatherImages/newyork-night.jpeg"); }
 .bg-ash { background-image: url("/weatherImages/ashburn.png"); }
 .bg-ash.night { background-image: url("/weatherImages/ashburn-night.jpg"); }
-/* No night photo for this one: manasquan_night.heic is a format no browser can
-   decode, so the night wash above carries it. Drop in a .jpg and add a
-   .bg-man.night rule if you want a separate night shot. */
 .bg-man { background-image: url("/weatherImages/manasquan.jpeg"); }
+.bg-man.night { background-image: url("/weatherImages/manasquan-night.jpg"); }
 
 /* --- wider screens: more columns, never a stretched layout ---------------- */
 @media (min-width: 700px) {

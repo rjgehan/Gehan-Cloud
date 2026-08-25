@@ -87,7 +87,6 @@ services on the same box behind this app's session cookie.
 | `POST` | `/auth/login` | public | Exchange credentials for a bearer token |
 | `GET` | `/users` | `ADMIN` | User management console |
 | `POST` | `/users`, `/users/{id}/delete`, `/{id}/reset`, `/{id}/role` | `ADMIN` | Create, delete, reset password, change role |
-| `GET` | `/api/hello` | bearer token | Liveness sample |
 | `GET` / `POST` | `/api/grocery/**` | public | Shared list and pantry state |
 | `POST` | `/api/share` | `key` header | Receive a shared link |
 | `GET` | `/api/share/latest` | bearer token | Read the most recent link |
@@ -208,7 +207,7 @@ src/main/java/cloud/gehan/
 
 src/main/resources/
 ├── apps.yml      the portal tile list — add services here
-├── static/css/   home.css (portal), users.css, and the older per-page sheets
+├── static/css/   home.css (portal), users.css
 └── templates/    index, login, users
 ```
 

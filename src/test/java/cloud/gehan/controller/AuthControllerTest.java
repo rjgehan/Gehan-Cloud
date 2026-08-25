@@ -63,8 +63,10 @@ class AuthControllerTest {
 
         assertThat(token).isNotBlank();
 
-        mvc.perform(get("/api/hello").header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk());
+        // /api/share/latest is protected by the JWT filter and 404s when nothing has
+        // been shared. Anything other than 401 proves the token was accepted.
+        mvc.perform(get("/api/share/latest").header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -100,13 +102,13 @@ class AuthControllerTest {
     /** API clients get a 401 they can act on, not a redirect to the HTML login form. */
     @Test
     void garbageTokenDoesNotAuthenticate() throws Exception {
-        mvc.perform(get("/api/hello").header("Authorization", "Bearer not-a-jwt"))
+        mvc.perform(get("/api/share/latest").header("Authorization", "Bearer not-a-jwt"))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
     void missingTokenIsUnauthorized() throws Exception {
-        mvc.perform(get("/api/hello"))
+        mvc.perform(get("/api/share/latest"))
                 .andExpect(status().isUnauthorized());
     }
 }
