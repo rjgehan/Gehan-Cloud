@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
 
 <head>
     <meta charset="UTF-8">
@@ -42,7 +42,10 @@
             <div class="flex-item" onclick="window.location.href='https://ha.gehan.cloud'">
                 <i class="bi bi-camera-video-fill"></i>
             </div>
-            <div class="flex-item">
+            <div class="flex-item" th:if="${isAdmin}" onclick="window.location.href='/users'">
+                <i class="bi bi-people-fill"></i>
+            </div>
+            <div class="flex-item" th:unless="${isAdmin}">
                 <i class="bi bi-house-heart-fill"></i>
             </div>
             <div class="flex-item">

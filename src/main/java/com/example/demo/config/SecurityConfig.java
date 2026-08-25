@@ -10,9 +10,12 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
+import com.example.demo.security.FirstLoginAuthenticationProvider;
+import com.example.demo.service.UserService;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -29,6 +32,7 @@ import org.springframework.http.ResponseEntity;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -47,6 +51,12 @@ public class SecurityConfig {
         return username -> {
             User user = userRepository.findByUsername(username)
                     .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+            if (user.isUnclaimed()) {
+                // FirstLoginAuthenticationProvider claims these before the DAO provider
+                // runs. Getting here means it did not, so refuse rather than NPE on a
+                // null password.
+                throw new UsernameNotFoundException("Account has no password set");
+            }
             return org.springframework.security.core.userdetails.User
                     .withUsername(user.getUsername())
                     .password(user.getPassword())
@@ -61,21 +71,25 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    // 3) AuthenticationManager
+    // 3) AuthenticationManager: try the first-login claim, then normal password checking
     @Bean
     public AuthenticationManager authenticationManager(
-            HttpSecurity http,
+            UserService userService,
             UserDetailsService userDetailsService,
-            PasswordEncoder passwordEncoder) throws Exception {
-        AuthenticationManagerBuilder builder = http.getSharedObject(AuthenticationManagerBuilder.class);
-        builder.userDetailsService(userDetailsService).passwordEncoder(passwordEncoder);
-        return builder.build();
+            PasswordEncoder passwordEncoder) {
+        DaoAuthenticationProvider daoProvider = new DaoAuthenticationProvider(userDetailsService);
+        daoProvider.setPasswordEncoder(passwordEncoder);
+        return new ProviderManager(
+                List.of(new FirstLoginAuthenticationProvider(userService), daoProvider));
     }
 
     // 4) Security filter chain
     @Bean
-public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+public SecurityFilterChain filterChain(HttpSecurity http, AuthenticationManager authenticationManager)
+        throws Exception {
     http
+        // Bind explicitly; otherwise the auto-configured global manager can win.
+        .authenticationManager(authenticationManager)
         .csrf(csrf -> csrf.disable())
         .authorizeHttpRequests(auth -> auth
             // Public: home, login, auth probe, static assets, public APIs, and error pages
@@ -90,6 +104,8 @@ public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
                 "/hamilton.jpeg", "/ashburn.png", "/manasquan.jpeg", "/newyork.jpeg",
                 "/css/**", "/js/**", "/images/**", "/fonts/**", "/webjars/**"
             ).permitAll()
+            // User administration
+            .requestMatchers("/users/**").hasRole("ADMIN")
             // Protected API
             .requestMatchers("/api/**").authenticated()
             // Everything else requires login

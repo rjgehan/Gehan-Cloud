@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Users | Gehan.Cloud</title>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="/css/users.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+</head>
+
+<body>
+    <div class="bg"></div>
+    <div class="bg bg2"></div>
+    <div class="bg bg3"></div>
+
+    <main class="page">
+        <header class="page-head">
+            <a class="back" href="/" aria-label="Back to portal"><i class="bi bi-arrow-left"></i></a>
+            <h1>Users</h1>
+            <span class="whoami" th:text="'Signed in as ' + ${currentUsername}">Signed in as admin</span>
+        </header>
+
+        <div class="banner ok" th:if="${message}" th:text="${message}"></div>
+        <div class="banner bad" th:if="${error}" th:text="${error}"></div>
+
+        <section class="card">
+            <h2>Add a user</h2>
+            <p class="hint">New accounts start with no password. The first password typed at
+                login becomes theirs.</p>
+            <form class="new-user" method="post" action="/users">
+                <input type="text" name="username" placeholder="Username" required
+                       pattern="[A-Za-z0-9._\-]{2,32}"
+                       title="2-32 characters: letters, numbers, dot, dash, underscore">
+                <select name="role">
+                    <option value="USER">User</option>
+                    <option value="ADMIN">Admin</option>
+                </select>
+                <button type="submit" class="primary"><i class="bi bi-plus-lg"></i> Create</button>
+            </form>
+        </section>
+
+        <section class="card">
+            <h2>Existing users</h2>
+            <table class="users">
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Role</th>
+                        <th>Password</th>
+                        <th class="actions-col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="u : ${users}">
+                        <td class="name">
+                            <span th:text="${u.username}">name</span>
+                            <span class="you" th:if="${u.username == currentUsername}">you</span>
+                        </td>
+                        <td>
+                            <span class="pill" th:classappend="${u.admin} ? 'pill-admin' : 'pill-user'"
+                                  th:text="${u.role}">USER</span>
+                        </td>
+                        <td>
+                            <span class="pill pill-pending" th:if="${u.unclaimed}">Not set yet</span>
+                            <span class="pill pill-set" th:unless="${u.unclaimed}">Set</span>
+                        </td>
+                        <td class="actions">
+                            <form method="post" th:action="@{'/users/' + ${u.id} + '/role'}">
+                                <input type="hidden" name="role" th:value="${u.admin} ? 'USER' : 'ADMIN'">
+                                <button type="submit" class="ghost"
+                                        th:text="${u.admin} ? 'Make user' : 'Make admin'">Make admin</button>
+                            </form>
+                            <form method="post" th:action="@{'/users/' + ${u.id} + '/reset'}">
+                                <button type="submit" class="ghost"
+                                        th:attr="onclick=|return confirm('Reset the password for ${u.username}? They will set a new one at next login.')|">
+                                    Reset password
+                                </button>
+                            </form>
+                            <form method="post" th:action="@{'/users/' + ${u.id} + '/delete'}">
+                                <button type="submit" class="danger"
+                                        th:attr="onclick=|return confirm('Delete ${u.username}? This cannot be undone.')|">
+                                    Delete
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+    </main>
+</body>
+
+</html>

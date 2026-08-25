@@ -29,7 +29,11 @@
       <div class="row button">
         <input type="submit" value="Login" />
       </div>
-      <div class="signup-link"></div>
+      <div class="signup-link">
+        <span style="font-size:14px;color:#6b7a6d;">
+          First time signing in? The password you enter now becomes your password.
+        </span>
+      </div>
       <div th:if="${param.error}" style="color:red;">
     Invalid username or password
 </div>
