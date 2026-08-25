@@ -35,10 +35,14 @@ LABEL org.opencontainers.image.title="Gehan Cloud" \
       org.opencontainers.image.source="https://github.com/rjgehan/Gehan-Cloud" \
       org.opencontainers.image.licenses="MIT"
 
+# Ubuntu noble already ships a user at UID 1000, so the app user takes a UID
+# outside that range. Pinned rather than auto-assigned, so a bind-mounted /data
+# can be chowned to a known owner.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/* \
- && useradd --system --uid 1000 --create-home --shell /usr/sbin/nologin app
+ && groupadd --system --gid 10001 app \
+ && useradd --system --uid 10001 --gid app --create-home --shell /usr/sbin/nologin app
 
 WORKDIR /app
 COPY --from=build /build/target/extracted/dependencies/ ./
