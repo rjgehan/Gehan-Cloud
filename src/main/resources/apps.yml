@@ -29,6 +29,14 @@ portal:
       icon: bi-cart-fill
       color: amber
 
+    # Only routes on the home network. beach.gehan.cloud is deliberately absent
+    # until its access rules are settled.
+    - label: Home
+      url: https://home.gehan.cloud/dashboard/
+      icon: bi-house-door-fill
+      color: teal
+      lanOnly: true
+
     - label: Users
       url: /users
       icon: bi-people-fill

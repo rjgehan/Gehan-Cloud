@@ -1,6 +1,7 @@
 package cloud.gehan.controller;
 
 import cloud.gehan.config.PortalProperties;
+import cloud.gehan.security.LocalNetwork;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -15,22 +16,23 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Session probe for a reverse-proxy forward-auth middleware (Traefik ForwardAuth,
- * Nginx auth_request). The proxy calls this before serving another service on the
+ * Probes for a reverse-proxy forward-auth middleware (Traefik ForwardAuth, Nginx
+ * auth_request). The proxy calls one of these before serving another service on the
  * domain; 2xx lets the request through, anything else is returned to the browser.
  *
- * <p>Answering an unauthenticated browser with 302 rather than 401 is what makes
- * single sign-on work: the visitor lands on the portal login and comes back to
- * where they were going.
+ * <p>Answering a browser with 302 rather than 401 is what makes these useful: the
+ * visitor lands somewhere sensible instead of on an error page.
  */
 @RestController
 public class AuthProbeController {
 
     private final PortalProperties portal;
+    private final LocalNetwork localNetwork;
     private final AuthenticationTrustResolver trustResolver = new AuthenticationTrustResolverImpl();
 
-    public AuthProbeController(PortalProperties portal) {
+    public AuthProbeController(PortalProperties portal, LocalNetwork localNetwork) {
         this.portal = portal;
+        this.localNetwork = localNetwork;
     }
 
     @GetMapping("/__auth")
@@ -46,6 +48,30 @@ public class AuthProbeController {
         return ResponseEntity.status(HttpStatus.FOUND)
                 .header(HttpHeaders.LOCATION, loginUrlReturningTo(originalUrl(request)))
                 .build();
+    }
+
+    /**
+     * Lets a service through only for visitors on the local network, and sends everyone
+     * else to the portal rather than showing them an error. Attach this to a hostname
+     * that should quietly turn into the launcher when you are not at home.
+     *
+     * <p>Like the tiles, this is presentation backed by the proxy: it holds only while
+     * the proxy is the one setting X-Forwarded-For. It is not a substitute for the
+     * service having its own login.
+     */
+    @GetMapping("/__lan")
+    public ResponseEntity<Void> localOnly(HttpServletRequest request) {
+        if (localNetwork.includes(request.getRemoteAddr())) {
+            return ResponseEntity.ok().build();
+        }
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, portalHome())
+                .build();
+    }
+
+    private String portalHome() {
+        String domain = portal.getBaseDomain();
+        return (domain == null || domain.isBlank()) ? "/" : "https://" + domain + "/";
     }
 
     /**

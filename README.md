@@ -87,7 +87,8 @@ one grid and every link still works.
 | --- | --- | --- | --- |
 | `GET` | `/` | authenticated | The launcher |
 | `GET` | `/login` | public | Form login, also claims unclaimed accounts |
-| `GET` | `/__auth` | public | Session probe for a reverse-proxy forward-auth middleware |
+| `GET` | `/__auth` | public | Forward-auth probe: is this visitor signed in? |
+| `GET` | `/__lan` | public | Forward-auth probe: is this visitor on the local network? |
 | `POST` | `/logout` | authenticated | Sign out |
 | `GET` | `/users` | `ADMIN` | User management console |
 | `POST` | `/users`, `/users/{id}/delete`, `/{id}/reset`, `/{id}/role` | `ADMIN` | Create, delete, reset password, change role |
@@ -256,6 +257,45 @@ that is. Two common cases need it:
   every visitor arrive as one address, often the router's. Add it as a `/32`.
 - **Split-horizon DNS.** If local DNS points the hostname at the server's LAN
   address, visitors keep their real LAN address and the defaults are fine.
+
+### Turning a hostname into the launcher when you are away
+
+A tile greys out, but a bookmark or a typed address still lands somewhere. For a
+hostname that should only work at home, `GET /__lan` answers a forward-auth
+middleware with 200 on the local network and a 302 to the portal everywhere else,
+so being away quietly puts you on the launcher instead of an error page:
+
+```yaml
+http:
+  middlewares:
+    home-only:
+      forwardAuth:
+        address: "http://gehan-cloud:8080/__lan"
+
+  routers:
+    home:
+      rule: "Host(`home.gehan.cloud`)"
+      entryPoints: [websecure]
+      middlewares: [home-only]
+      service: home
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    home:
+      loadBalancer:
+        servers:
+          - url: "http://100.86.236.12:8088"
+```
+
+No session is needed for this one: it is a question about where you are, not who
+you are. Chain it with `portal-auth` when you want both — `middlewares:
+[home-only, portal-auth]` requires being at home *and* signed in.
+
+`/__lan` uses the same `portal.trusted-networks` list as the tiles, which means it
+cannot yet tell one site from another: with a beach network in that list, being at
+the beach would also open a home-only hostname. Named network groups would fix
+that; nothing needs them today.
 
 **This is cosmetic, not a security boundary.** What keeps those services private
 is that their addresses do not route from the internet. `lanOnly` only stops the

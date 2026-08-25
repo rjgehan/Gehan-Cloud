@@ -86,7 +86,7 @@ public class SecurityConfig {
                                 "/login",
                                 // Reached anonymously so it can answer with a redirect
                                 // to the login page rather than a dead end.
-                                "/__auth",
+                                "/__auth", "/__lan",
                                 "/error", "/error/**",
                                 "/indexjs.js",
                                 "/favicon.ico", "/favicon-*.png",
