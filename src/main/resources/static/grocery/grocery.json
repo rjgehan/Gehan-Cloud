@@ -1,0 +1,30 @@
+{
+    "grocery": {
+        "list": [
+            "milk",
+            "bread",
+            "eggs"
+        ],
+        "pantry": [
+            "salt",
+            "sugar",
+            "flour"
+        ],
+        "meals": {
+            "chicken and rice": [
+                "chicken",
+                "rice"
+            ]
+        },
+        "next meals": {
+            "1": [
+                "pizza",
+                "fries"
+            ],
+            "2": [
+                "chicken",
+                "rice"
+            ]
+        }
+    }
+}

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ashburn Takeout</title>
+
+  <!-- Your styles -->
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/background.css">
+  <link rel="stylesheet" href="../css/apps.css">
+  <link rel="stylesheet" href="../css/food.css">
+
+  <!-- Material Design Icons (lots of food choices) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+</head>
+
+<body>
+  <!-- background layers -->
+  <div class="bg"></div>
+  <div class="bg bg2"></div>
+  <div class="bg bg3"></div>
+
+  <div class="content">
+    <!-- Add Food Modal -->
+    <div id="addFoodModal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Add Restaurant</h2>
+
+        <label>Name
+          <input type="text" id="foodName">
+        </label>
+
+        <label>Cuisine
+          <input type="text" id="foodCuisine">
+        </label>
+
+        <label>Price
+          <input type="text" id="foodPrice" placeholder="$0.00">
+        </label>
+
+        <label>Score
+          <input type="number" id="foodScore" min="0" max="100" value="70">
+        </label>
+
+        <label>Icon
+          <select id="foodIcon">
+            <option value="mdi-silverware-fork-knife">🍴 Default</option>
+            <option value="mdi-pizza">🍕 Pizza</option>
+            <option value="mdi-noodles">🍜 Noodles</option>
+            <option value="mdi-taco">🌮 Taco</option>
+            <option value="mdi-bowl-pho">🥢 Pho</option>
+            <option value="mdi-grill">🔥 BBQ</option>
+            <option value="mdi-food-halal">🕌 Halal</option>
+          </select>
+        </label>
+
+        <div class="modal-actions">
+          <button onclick="saveFoodRow()">Save</button>
+          <button onclick="closeModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- top app buttons -->
+    <div class="flex-container">
+      <!-- Home -->
+      <div class="flex-item" onclick="window.location.href='/'">
+        <i class="mdi mdi-home"></i>
+      </div>
+
+      <!-- Add new row -->
+      <div class="flex-item" onclick="addFoodRow()">
+        <i class="mdi mdi-plus-circle"></i>
+      </div>
+
+      <!-- Delete last row -->
+      <div class="flex-item" onclick="deleteLastFoodRow()">
+        <i class="mdi mdi-delete"></i>
+      </div>
+
+      <!-- Edit first row (example) -->
+      <div class="flex-item" onclick="editFirstFoodRow()">
+        <i class="mdi mdi-pencil"></i>
+      </div>
+    </div>
+
+
+    <!-- compact list -->
+    <div class="flex-container-food">
+
+      <!-- Señor Tequilas -->
+      <div class="food-row" onclick="this.classList.toggle('is-open')">
+        <div class="food-info">
+          <div class="food-name">Señor Tequilas</div>
+          <div class="food-meta">
+            <span class="tag"><i class="mdi mdi-taco"></i> Mexican</span>
+            <span class="tag"><i class="mdi mdi-cash-multiple"></i> $54.89</span>
+          </div>
+        </div>
+        <div class="food-score good" data-score="82">82</div>
+        <div class="food-details">Entrees: Baria Tacos, Nacho bowl</div>
+      </div>
+
+      <!-- Asia Cafe -->
+      <div class="food-row" onclick="this.classList.toggle('is-open')">
+        <div class="food-info">
+          <div class="food-name">Asia Cafe</div>
+          <div class="food-meta">
+            <span class="tag"><i class="mdi mdi-noodles"></i> Chinese</span>
+            <span class="tag"><i class="mdi mdi-cash-multiple"></i> $22.26</span>
+          </div>
+        </div>
+        <div class="food-score meh" data-score="72">72</div>
+        <div class="food-details">Entree: Chicken &amp; Broccoli</div>
+      </div>
+
+      <!-- Alo Vietnam -->
+      <div class="food-row" onclick="this.classList.toggle('is-open')">
+        <div class="food-info">
+          <div class="food-name">Alo Vietnam</div>
+          <div class="food-meta">
+            <span class="tag"><i class="mdi mdi-noodles"></i> Vietnamese</span>
+            <span class="tag"><i class="mdi mdi-cash-multiple"></i> $32.14</span>
+          </div>
+        </div>
+        <div class="food-score great" data-score="91">91</div>
+        <div class="food-details">Beef Pho · Summer rolls · Ginger Tea</div>
+      </div>
+
+      <!-- Naz's Halal -->
+      <div class="food-row" onclick="this.classList.toggle('is-open')">
+        <div class="food-info">
+          <div class="food-name">Naz's Halal</div>
+          <div class="food-meta">
+            <span class="tag"><i class="mdi mdi-food-halal"></i> Halal</span>
+            <span class="tag"><i class="mdi mdi-cash-multiple"></i> $33.28</span>
+          </div>
+        </div>
+        <div class="food-score good" data-score="81">81</div>
+        <div class="food-details">Entree: Combo Over Rice · Sides: Mozz sticks ×2</div>
+      </div>
+
+      <!-- Emilio's Brick Oven -->
+      <div class="food-row" onclick="this.classList.toggle('is-open')">
+        <div class="food-info">
+          <div class="food-name">Emilio's Brick Oven</div>
+          <div class="food-meta">
+            <span class="tag"><i class="mdi mdi-pizza"></i> Pizza</span>
+            <span class="tag"><i class="mdi mdi-cash-multiple"></i> $28.51</span>
+          </div>
+        </div>
+        <div class="food-score bad" data-score="26">26</div>
+        <div class="food-details">Entree: Cheese Pizza · Side: Chicken Kabob</div>
+      </div>
+
+      <!-- Spitz -->
+      <div class="food-row" onclick="this.classList.toggle('is-open')">
+        <div class="food-info">
+          <div class="food-name">Spitz</div>
+          <div class="food-meta">
+            <span class="tag"><i class="mdi mdi-food-halal"></i> Greek</span>
+            <span class="tag"><i class="mdi mdi-cash-multiple"></i> $24.32</span>
+          </div>
+        </div>
+        <div class="food-score good" data-score="81">81</div>
+        <div class="food-details">Entrees: Gyro, Street Wrap · Sides: Fries, Gyro Salad</div>
+      </div>
+
+      <!-- Dickey's BBQ -->
+      <div class="food-row" onclick="this.classList.toggle('is-open')">
+        <div class="food-info">
+          <div class="food-name">Dickey's BBQ</div>
+          <div class="food-meta">
+            <span class="tag"><i class="mdi mdi-grill"></i> BBQ</span>
+            <span class="tag"><i class="mdi mdi-cash-multiple"></i> $22.83</span>
+          </div>
+        </div>
+        <div class="food-score bad" data-score="57">57</div>
+        <div class="food-details">Entrees: Pulled Pork ×2 · Sides: Iced Tea ×2, Mac &amp; Cheese ×2</div>
+      </div>
+
+      <!-- Chopsticks House -->
+      <div class="food-row" onclick="this.classList.toggle('is-open')">
+        <div class="food-info">
+          <div class="food-name">Chopsticks House</div>
+          <div class="food-meta">
+            <span class="tag"><i class="mdi mdi-noodles"></i> Chinese</span>
+            <span class="tag"><i class="mdi mdi-cash-multiple"></i> $31.89</span>
+          </div>
+        </div>
+        <div class="food-score meh" data-score="79">79</div>
+        <div class="food-details">
+          Entree: Sesame Chicken · Sides: Steamed Dumplings, Wonton Soup, Crab Rangoon, Sweet Doughnuts · Drink: Sprite
+        </div>
+      </div>
+
+      <!-- Los Toltecos -->
+      <div class="food-row" onclick="this.classList.toggle('is-open')">
+        <div class="food-info">
+          <div class="food-name">Los Toltecos</div>
+          <div class="food-meta">
+            <span class="tag"><i class="mdi mdi-taco"></i> Mexican</span>
+            <span class="tag"><i class="mdi mdi-cash-multiple"></i> $34.92</span>
+          </div>
+        </div>
+        <div class="food-score meh" data-score="63">63</div>
+        <div class="food-details">Entree: Sampler · Sides: Chimichangas</div>
+      </div>
+
+    </div>
+  </div>
+  <script src="../ashburnjs.js"></script>
+
+</body>
+
+</html>

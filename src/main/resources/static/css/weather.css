@@ -1,0 +1,135 @@
+/* Weather cards */
+
+.flex-weather {
+    display: inline-block;
+    position: relative;
+    margin: 5px;
+
+    color: #fff;
+    font-weight: 700;
+    font-size: 1em;
+    text-align: center;
+
+    flex: 1 0 auto;
+    height: auto;
+    aspect-ratio: 1 / 1;
+
+    border-radius: 14px;
+    /* overflow: hidden; */
+    background-size: cover;
+    background-position: center;
+    background-color: #2b2b2b;
+
+    border: none;
+    background-clip: padding-box;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, .22);
+}
+
+/* only daytime cards get the dark overlay */
+.flex-weather:not(.night)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(to bottom,
+      rgba(0, 0, 0, .18) 0%,
+      rgba(0, 0, 0, .28) 45%,
+      rgba(0, 0, 0, .58) 100%);
+}
+
+
+.flex-weather>* {
+    position: relative;
+    z-index: 1;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
+}
+
+/* Backgrounds */
+.bg-ham {
+    background-image: url("/weatherImages/hamilton.JPG");
+}
+
+.bg-ham.night {
+    background-image: url("/weatherImages/hamilton-night.jpg");
+}
+
+.bg-nyc {
+    background-image: url("/weatherImages/newyork.jpeg");
+}
+
+.bg-nyc.night {
+    background-image: url("/weatherImages/newyork-night.jpeg");
+}
+
+.bg-ash {
+    background-image: url("/weatherImages/ashburn.png");
+}
+
+.bg-ash.night {
+    background-image: url("/weatherImages/ashburn-night.jpg");
+}
+
+.bg-man {
+    background-image: url("/weatherImages/manasquan.jpeg");
+}
+
+.bg-man.night {
+    background-image: url("/weatherImages/manasquan-night.heic");
+}
+
+/* Desktop size only (no hover) */
+@media (min-width: 1024px) {
+    .flex-weather {
+        flex: 0 0 200px;
+        margin: 3px;
+    }
+}
+
+/* compact weather rows with icons */
+.w-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    line-height: 1.15;
+    margin: 2px 0;
+}
+
+.w-ico {
+    /* icon style */
+    font-size: 1.05em;
+    opacity: .95;
+}
+
+.w-temp {
+    /* make main temp pop */
+    font-size: 1.35em;
+    font-weight: 800;
+}
+
+/* optional: small desc */
+.w-desc {
+    opacity: .95;
+    font-size: .95em;
+}
+
+.w-mainico {
+    font-size: 1.6em;
+    /* bigger than normal icons */
+    margin: 4px 0;
+    display: inline-block;
+}
+
+
+.flex-weather,
+.flex-weather p,
+.flex-weather .w-row,
+.flex-weather .w-value,
+.flex-weather .w-desc,
+.flex-weather .w-temp {
+  text-shadow:
+    0 2px 4px rgba(0,0,0,0.9),   /* strong dark halo */
+    0 0 6px rgba(0,0,0,0.8),     /* outer glow */
+    0 0 12px rgba(0,0,0,0.7);    /* bigger soft glow */
+}

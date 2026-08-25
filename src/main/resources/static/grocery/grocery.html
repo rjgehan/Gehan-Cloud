@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Grocery Test</title>
+</head>
+<body>
+  <h1>Grocery Test</h1>
+
+  <input id="itemInput" placeholder="item"/>
+  <button onclick="add()">Add to List</button>
+  <button onclick="removeOne()">Remove from List</button>
+  <button onclick="clearList()">Clear List</button>
+  <button onclick="refresh()">Refresh</button>
+
+  <h3>List</h3>
+  <pre id="listOut"></pre>
+
+  <h3>Pantry</h3>
+  <input id="pantryInput" placeholder="pantry item"/>
+  <button onclick="addPantry()">Add Pantry</button>
+  <button onclick="removePantry()">Remove Pantry</button>
+  <button onclick="checkPantry()">Check Pantry</button>
+  <pre id="pantryOut"></pre>
+
+  <script src="/js/grocery-api.js"></script>
+</body>
+</html>
