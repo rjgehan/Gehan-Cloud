@@ -3,6 +3,7 @@ package cloud.gehan.config;
 import cloud.gehan.model.User;
 import cloud.gehan.repository.UserRepository;
 import cloud.gehan.security.FirstLoginAuthenticationProvider;
+import cloud.gehan.security.RedirectTargets;
 import cloud.gehan.service.UserService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,9 +27,11 @@ import java.util.List;
 public class SecurityConfig {
 
     private final UserRepository userRepository;
+    private final PortalProperties portal;
 
-    public SecurityConfig(UserRepository userRepository) {
+    public SecurityConfig(UserRepository userRepository, PortalProperties portal) {
         this.userRepository = userRepository;
+        this.portal = portal;
     }
 
     // 1) Load users from the database
@@ -81,6 +84,9 @@ public class SecurityConfig {
                         // The login page, the assets it needs, and error pages
                         .requestMatchers(
                                 "/login",
+                                // Reached anonymously so it can answer with a redirect
+                                // to the login page rather than a dead end.
+                                "/__auth",
                                 "/error", "/error/**",
                                 "/indexjs.js",
                                 "/favicon.ico", "/favicon-*.png",
@@ -95,10 +101,9 @@ public class SecurityConfig {
                 )
                 .formLogin(form -> form
                         .loginPage("/login").permitAll()
-                        .successHandler((req, res, authn) -> {
-                            String cont = req.getParameter("continue");
-                            res.sendRedirect((cont != null && !cont.isBlank()) ? cont : "/");
-                        })
+                        .successHandler((req, res, authn) -> res.sendRedirect(
+                                RedirectTargets.resolve(
+                                        req.getParameter("continue"), portal.getBaseDomain(), "/")))
                 )
                 .logout(logout -> logout.permitAll())
                 .requestCache(cache -> cache.disable());

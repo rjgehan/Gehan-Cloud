@@ -87,6 +87,7 @@ one grid and every link still works.
 | --- | --- | --- | --- |
 | `GET` | `/` | authenticated | The launcher |
 | `GET` | `/login` | public | Form login, also claims unclaimed accounts |
+| `GET` | `/__auth` | public | Session probe for a reverse-proxy forward-auth middleware |
 | `POST` | `/logout` | authenticated | Sign out |
 | `GET` | `/users` | `ADMIN` | User management console |
 | `POST` | `/users`, `/users/{id}/delete`, `/{id}/reset`, `/{id}/role` | `ADMIN` | Create, delete, reset password, change role |
@@ -151,6 +152,75 @@ breakpoint rather than hard-coding a number. Without JavaScript the tiles stay a
 single grid and every link still works.
 
 
+## Putting another service behind this login
+
+Services running on other machines can be reached through this domain without
+being exposed themselves. The server is on both the public internet and the
+Tailscale network, so it bridges them: Traefik terminates TLS publicly and
+forwards over Tailscale. The remote machine needs no public IP and no port
+forwarding, and visitors never install Tailscale.
+
+```
+  visitor ──https──▶ server (public IP + tailnet) ──WireGuard──▶ app (tailnet only)
+                     Traefik: TLS, routing, auth
+```
+
+Point a hostname at the server, then add a router and service in Traefik's
+**file** provider — Docker labels do not apply, since the backend is not a
+container on that host:
+
+```yaml
+http:
+  middlewares:
+    portal-auth:
+      forwardAuth:
+        address: "http://gehan-cloud:8080/__auth"
+        authResponseHeaders: ["X-Auth-User"]
+
+  routers:
+    plex:
+      rule: "Host(`plex.gehan.cloud`)"
+      entryPoints: [websecure]
+      middlewares: [portal-auth]        # omit for services with their own login
+      service: plex
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    plex:
+      loadBalancer:
+        servers:
+          - url: "http://100.101.102.103:8080"    # the device's Tailscale IP
+```
+
+`GET /__auth` answers that middleware. A signed-in visitor gets 200 and the
+request proceeds; anyone else gets a 302 to the portal login and is returned to
+where they were going. Attach the middleware only to the routers that need it —
+services with their own login work fine without it.
+
+Two environment variables are required for this, both in
+[`.env.example`](.env.example):
+
+| Variable | Value | Why |
+| --- | --- | --- |
+| `BASE_DOMAIN` | `gehan.cloud` | Builds the login URL, and limits where a login may return you |
+| `SERVER_SERVLET_SESSION_COOKIE_DOMAIN` | `gehan.cloud` | Sends the session cookie to every subdomain |
+
+### Things that will catch you out
+
+- **No leading dot on the cookie domain.** Tomcat validates it per RFC 6265 and
+  rejects `.gehan.cloud`, turning every login into a 500. Plain `gehan.cloud`
+  already covers subdomains.
+- **Use the Tailscale IP, not the MagicDNS name.** A Traefik container will not
+  resolve `*.ts.net`; `100.x.y.z` routes through the host and is stable.
+- **The remote app must bind `0.0.0.0`.** Bound to loopback, or published as
+  `-p 127.0.0.1:8080:8080` in Docker, the server cannot reach it.
+- **Set `server.forward-headers-strategy=framework` in the remote app too**, or
+  its redirects will point at `http://100.x.y.z:8080/...` instead of the public
+  URL.
+- **Tailscale ACLs** have to permit the server to reach that device and port.
+
+
 ## Account lifecycle
 
 Accounts are managed in the app, not in code. Sign in as an admin and the portal
@@ -197,10 +267,10 @@ so mount a volume there to persist it across redeploys.
 ```
 src/main/java/cloud/gehan/
 ├── config/       SecurityConfig, AdminBootstrap, PortalProperties
-├── controller/   Home (launcher), Login, UserAdmin
+├── controller/   Home (launcher), Login, UserAdmin, AuthProbe
 ├── model/        User entity
 ├── repository/   Spring Data JPA
-├── security/     FirstLoginAuthenticationProvider
+├── security/     FirstLoginAuthenticationProvider, RedirectTargets
 └── service/      UserService — business rules and lockout guards
 
 src/main/resources/

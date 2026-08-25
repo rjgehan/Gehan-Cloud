@@ -16,6 +16,21 @@ public class PortalProperties {
 
     private List<AppLink> apps = new ArrayList<>();
 
+    /**
+     * The domain this portal serves, e.g. gehan.cloud. Used to decide which redirect
+     * targets are ours, and to build the absolute login URL a forward-auth redirect
+     * needs. Unset means only same-host paths are accepted, which suits local runs.
+     */
+    private String baseDomain = "";
+
+    public String getBaseDomain() {
+        return baseDomain;
+    }
+
+    public void setBaseDomain(String baseDomain) {
+        this.baseDomain = baseDomain;
+    }
+
     public List<AppLink> getApps() {
         return apps;
     }
