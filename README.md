@@ -273,16 +273,16 @@ http:
         address: "http://gehan-cloud:8080/__lan"
 
   routers:
-    home:
-      rule: "Host(`home.gehan.cloud`)"
+    thing:
+      rule: "Host(`thing.gehan.cloud`)"
       entryPoints: [websecure]
       middlewares: [home-only]
-      service: home
+      service: thing
       tls:
         certResolver: letsencrypt
 
   services:
-    home:
+    thing:
       loadBalancer:
         servers:
           - url: "http://100.86.236.12:8088"
@@ -292,15 +292,39 @@ No session is needed for this one: it is a question about where you are, not who
 you are. Chain it with `portal-auth` when you want both — `middlewares:
 [home-only, portal-auth]` requires being at home *and* signed in.
 
-`/__lan` uses the same `portal.trusted-networks` list as the tiles, so it cannot
-tell one site from another. Only one tile is network-gated today, so a single list
-is enough. The moment a second site needs its own gate — a tile that should work
-at home and a tile that should work at the beach — that list has to become named
-groups, or being at either site would unlock both.
+`/__lan` shares `portal.trusted-networks` with the tiles, so it cannot tell one
+site from another — everything gated this way is gated to the same set of
+networks. That is fine as things stand and is worth understanding before adding a
+second gate. See [Two houses, one tile](#two-houses-one-tile).
 
-Nothing currently attaches this middleware; `home.gehan.cloud` is gated by login
-instead. It is kept because it is the right answer for a hostname that genuinely
-should not work away from one place.
+Nothing attaches this middleware today, and neither probe is in use: both
+dashboards are private and Photoprism brings its own login. They are kept as the
+answer for the next service that needs one.
+
+### Two houses, one tile
+
+Both dashboards answer at the same private address, `192.168.1.23:8080`, one on
+each house's network. So a single tile serves both: the address itself resolves to
+whichever house you are standing in, and neither dashboard is published or
+reachable from outside.
+
+That also keeps the network list simple. Gating two different services to two
+different houses would need the list split into named groups, or standing in
+either house would unlock both. Pointing both houses at one address turns the
+question into "am I in one of my houses?", which one list answers:
+
+```properties
+TRUSTED_NETWORKS=65.84.61.185/32,<home public address>/32
+```
+
+It costs some uniformity. Both boxes have to answer on the same address and port,
+and both networks have to use the same range, or one house will not find its own
+dashboard.
+
+The greying matters more here than usual. `192.168.1.x` is the most common home
+network there is, so on someone else's wifi `.23` is quite likely to be a real
+device — a printer, a router page, a camera. `lanOnly` is what keeps the tile from
+being a live link to a stranger's hardware.
 
 ### Why the network list is safe to rely on here
 

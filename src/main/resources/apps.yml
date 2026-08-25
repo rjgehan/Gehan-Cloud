@@ -29,19 +29,17 @@ portal:
       icon: bi-cart-fill
       color: amber
 
-    # Published through Traefik and gated by this portal's login, because the
-    # dashboard has none of its own. Works anywhere once you are signed in.
-    - label: Home
-      url: https://home.gehan.cloud/dashboard/
-      icon: bi-house-door-fill
-      color: teal
-
-    # Never published. The link is the address on the beach network itself, so it
-    # only resolves while you are on that wifi. VERIFY 192.168.1.23 is right.
-    - label: Beach
+    # One tile for both dashboards. Neither is published; the address is a private
+    # one, so it resolves to whichever house you are standing in - home or beach.
+    # Both boxes must answer on 192.168.1.23:8080 for this to work.
+    #
+    # lanOnly greys it out anywhere else. Without that it would still be a live
+    # link, and on someone else's 192.168.1.x network .23 is likely to be some
+    # stranger's printer or camera.
+    - label: Dashboard
       url: http://192.168.1.23:8080
-      icon: bi-umbrella-fill
-      color: cyan
+      icon: bi-speedometer2
+      color: teal
       lanOnly: true
 
     - label: Users
