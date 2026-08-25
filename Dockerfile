@@ -1,20 +1,23 @@
 # syntax=docker/dockerfile:1
 
 # --- Stage 1: build ----------------------------------------------------------
+# Maven comes with the image. The bundled ./mvnw wrapper is deliberately not
+# used here: it downloads and unzips Maven at build time, and a bare JDK image
+# has neither curl nor unzip to do that with.
+#
 # Pinned to BUILDPLATFORM so Maven always runs natively. A Spring Boot jar is
 # architecture-independent, so the same build output ships to every target arch
 # and only the JRE base image below differs. Without this pin, an arm64 target
 # would run the whole Maven build under QEMU emulation.
-FROM --platform=$BUILDPLATFORM eclipse-temurin:21-jdk-noble AS build
+FROM --platform=$BUILDPLATFORM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /build
 
 # Resolve dependencies in their own layer so code-only changes reuse the cache.
-COPY .mvn/ .mvn/
-COPY mvnw pom.xml ./
-RUN chmod +x mvnw && ./mvnw -B -q dependency:go-offline
+COPY pom.xml ./
+RUN mvn -B -q dependency:go-offline
 
 COPY src/ src/
-RUN ./mvnw -B -q clean package -DskipTests \
+RUN mvn -B -q clean package -DskipTests \
  && mv target/gehan-cloud-*.jar target/app.jar
 
 # Split the fat jar into layers that change at different rates, so a redeploy
