@@ -1,0 +1,166 @@
+# Gehan Cloud as a CasaOS app.
+#
+# CasaOS: + → Custom Install → Import (the ⋯ menu) → paste this file.
+#
+# Two things must exist BEFORE importing, or the app will start and then fail:
+#
+#   # 1. the data directory, owned by the UID the container runs as
+#   sudo mkdir -p /DATA/AppData/gehan-cloud/data
+#   sudo chown -R 10001:10001 /DATA/AppData/gehan-cloud/data
+#
+#   # 2. the network the tunnel is on, so cloudflared can resolve this by name
+#   sudo docker network create edge
+#   sudo docker network connect edge cloudflared
+#
+# Then fill in the two values marked CHANGE ME below and import.
+#
+# This differs from the root docker-compose.yml in three ways, all forced by
+# CasaOS: the settings are inline rather than in .env (CasaOS keeps the compose
+# in its own directory, so a relative env_file path does not resolve), the data
+# lives in a /DATA bind mount rather than a named volume so CasaOS's file manager
+# and backups can see it, and there is an x-casaos block so it gets a real tile.
+
+name: gehan-cloud
+
+services:
+  gehan-cloud:
+    image: ghcr.io/rjgehan/gehan-cloud:latest
+    container_name: gehan-cloud
+    restart: unless-stopped
+
+    environment:
+      # --- required ---------------------------------------------------------
+      BASE_DOMAIN: gehan.cloud
+
+      # No leading dot. Tomcat validates this per RFC 6265 and rejects
+      # ".gehan.cloud" outright, which turns every login into a 500.
+      SERVER_SERVLET_SESSION_COOKIE_DOMAIN: gehan.cloud
+
+      # Must be CF-Connecting-IP behind Cloudflare. The edge APPENDS the real
+      # address to any X-Forwarded-For the visitor sent rather than replacing it,
+      # and the app reads that header's first entry - so without this a visitor
+      # can claim any address they like and TRUSTED_NETWORKS believes it.
+      CLIENT_IP_HEADER: CF-Connecting-IP
+
+      # --- CHANGE ME --------------------------------------------------------
+      # The PUBLIC address of each house, as /32, comma separated. Loading
+      # gehan.cloud goes out to the internet and back, so you arrive looking like
+      # your router - not your 192.168 address. Leave empty for now: sign in as
+      # admin from each house, read the address off /users, then come back and
+      # fill this in. Until then the Dashboard tile just stays grey.
+      TRUSTED_NETWORKS: ""
+
+      # Container writes users.db here; matches the bind mount below.
+      APP_DATA_DIR: /data
+
+      # --- optional ---------------------------------------------------------
+      TZ: America/New_York
+      # LOG_LEVEL: INFO
+      # APP_LOG_LEVEL: INFO
+
+    volumes:
+      # CasaOS convention, so this shows up in its Files app and gets backed up.
+      # MUST be chowned to 10001:10001 first - the image runs as that UID and a
+      # bind mount arrives owned by root, so without the chown the app cannot
+      # create users.db and dies on startup.
+      - /DATA/AppData/gehan-cloud/data:/data
+
+    networks:
+      - edge
+
+    # Deliberately no `ports:`. Two reasons, and the second is the one that bites:
+    #
+    #   1. CLIENT_IP_HEADER above only holds while the tunnel is the single route
+    #      in. Anything that can open a socket to 8080 can send CF-Connecting-IP.
+    #   2. The session cookie is Secure, so it is never sent over plain HTTP.
+    #      Reaching this at http://<server-ip>:8080 would show you a login form
+    #      that silently refuses to log you in, which is a miserable thing to
+    #      debug. Use https://gehan.cloud - that is what the tile opens.
+
+    security_opt:
+      - no-new-privileges:true
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/login >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+    x-casaos:
+      envs:
+        - container: BASE_DOMAIN
+          description:
+            en_us: The domain this portal serves. Builds the login URL and limits where a login may return you.
+        - container: SERVER_SERVLET_SESSION_COOKIE_DOMAIN
+          description:
+            en_us: Sends the session cookie to every subdomain. No leading dot, or every login returns 500.
+        - container: CLIENT_IP_HEADER
+          description:
+            en_us: Where to read the visitor's address from. CF-Connecting-IP behind Cloudflare.
+        - container: TRUSTED_NETWORKS
+          description:
+            en_us: Public address of each house as /32, comma separated. Decides whether the Dashboard tile is live. Read yours off /users.
+        - container: TZ
+          description:
+            en_us: Timezone for log timestamps.
+      volumes:
+        - container: /data
+          description:
+            en_us: Holds users.db. Must be owned by UID 10001. Losing this loses every claimed password.
+
+networks:
+  # External because the tunnel belongs to its own stack. Both containers have to
+  # sit on it for cloudflared to resolve `gehan-cloud` by name.
+  edge:
+    name: edge
+    external: true
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: gehan-cloud
+  author: rjgehan
+  developer: rjgehan
+  category: Network
+  title:
+    en_us: Gehan Cloud
+  tagline:
+    en_us: One page the family can remember, with a tile for everything else.
+  description:
+    en_us: >-
+      Self-hosted launcher for the services on gehan.cloud. Form login with
+      passwords claimed at first use, an admin-only user console, and a tile page
+      driven by apps.yml. Reached over the existing Cloudflare tunnel, so nothing
+      listens on the server's public interface.
+  icon: https://raw.githubusercontent.com/rjgehan/Gehan-Cloud/main/src/main/resources/static/apple-touch-icon.png
+  thumbnail: ""
+  screenshot_link: []
+
+  # The tile opens the real site rather than a LAN port. There is no published
+  # port to open, and the Secure session cookie means plain HTTP would not log
+  # anyone in anyway.
+  scheme: https
+  hostname: gehan.cloud
+  index: /
+  port_map: "8080"
+
+  tips:
+    before_install:
+      en_us: >-
+        Run these on the server first, or the app will start and immediately die:
+        sudo mkdir -p /DATA/AppData/gehan-cloud/data && sudo chown -R 10001:10001
+        /DATA/AppData/gehan-cloud/data, then sudo docker network create edge &&
+        sudo docker network connect edge cloudflared. After it is up, sign in at
+        https://gehan.cloud as admin immediately - the first password typed claims
+        the account.

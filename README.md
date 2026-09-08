@@ -523,6 +523,46 @@ able to reach it.
 Without it, every redeploy starts from an empty database: a fresh unclaimed admin
 account and the loss of every password the family has claimed.
 
+### On CasaOS
+
+[`deploy/casaos/docker-compose.yml`](deploy/casaos/docker-compose.yml) is the same
+deployment as an importable CasaOS app: **+ → Custom Install → Import**, paste,
+fill in `TRUSTED_NETWORKS` when you know it.
+
+Two commands first, or the app starts and immediately dies:
+
+```bash
+sudo mkdir -p /DATA/AppData/gehan-cloud/data
+sudo chown -R 10001:10001 /DATA/AppData/gehan-cloud/data   # the UID the image runs as
+
+sudo docker network create edge
+sudo docker network connect edge cloudflared
+```
+
+The chown is the one that catches people. The image runs as UID 10001 and a bind
+mount arrives owned by root, so without it the app cannot create `users.db`.
+
+It differs from the root compose file only where CasaOS forces it to: settings are
+inline rather than in `.env`, because CasaOS keeps the compose in a directory of
+its own where a relative `env_file` path does not resolve; data is a `/DATA` bind
+mount rather than a named volume, so CasaOS's file manager and backups can see it;
+and an `x-casaos` block gives it a real tile.
+
+That tile opens `https://gehan.cloud` rather than a LAN port, because there is no
+published port to open — see below.
+
+### Why no published port
+
+Both compose files leave `ports:` out entirely. Two reasons:
+
+- `CLIENT_IP_HEADER` only holds while the tunnel is the single route in. Anything
+  that can open a socket to 8080 can send `CF-Connecting-IP` itself.
+- The session cookie is `Secure`, so it is never sent over plain HTTP. Reaching
+  the portal at `http://<server-ip>:8080` would serve a login form that silently
+  refuses to log you in — a miserable thing to debug.
+
+Use `https://gehan.cloud`, at home as much as anywhere else.
+
 ### The Cloudflare side
 
 Add `gehan.cloud` to the existing tunnel, pointing at `http://gehan-cloud:8080`.
@@ -635,6 +675,7 @@ src/main/resources/
 
 docker-compose.yml   the deployment: portal, optional Watchtower, optional tunnel
 .env.example         every setting the server needs, with the reasoning
+deploy/casaos/       the same deployment as an importable CasaOS app
 ```
 
 ## License
