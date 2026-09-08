@@ -29,6 +29,11 @@ portal:
       icon: bi-cart-fill
       color: amber
 
+    - label: Meals
+      url: https://meals.gehan.cloud
+      icon: bi-egg-fried
+      color: orange
+
     # One tile for both dashboards. Neither is published; the address is a private
     # one, so it resolves to whichever house you are standing in - home or beach.
     # Both boxes must answer on 192.168.1.23:8088 for this to work. The beach box
