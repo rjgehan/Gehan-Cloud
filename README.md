@@ -525,31 +525,43 @@ account and the loss of every password the family has claimed.
 
 ### On CasaOS
 
-[`deploy/casaos/docker-compose.yml`](deploy/casaos/docker-compose.yml) is the same
-deployment as an importable CasaOS app: **+ → Custom Install → Import**, paste,
-fill in `TRUSTED_NETWORKS` when you know it.
+[`deploy/casaos/docker-compose.yml`](deploy/casaos/docker-compose.yml) is the whole
+thing as one importable CasaOS app — the portal **and its own cloudflared** —
+rather than joining the tunnel already on the host. **+ → Custom Install →
+Import**, paste, fill in the two `CHANGE ME` values.
 
-Two commands first, or the app starts and immediately dies:
+One command first, or the app starts and immediately dies:
 
 ```bash
-sudo mkdir -p /DATA/AppData/gehan-cloud/data
-sudo chown -R 10001:10001 /DATA/AppData/gehan-cloud/data   # the UID the image runs as
-
-sudo docker network create edge
-sudo docker network connect edge cloudflared
+sudo mkdir -p /DATA/AppData/gehan-cloud
+sudo chown -R 10001:10001 /DATA/AppData/gehan-cloud   # the UID the image runs as
 ```
 
-The chown is the one that catches people. The image runs as UID 10001 and a bind
-mount arrives owned by root, so without it the app cannot create `users.db`.
+That chown is the thing that catches people. The image runs as UID 10001 and a
+bind mount arrives owned by root, so without it the app cannot create `users.db`.
 
-It differs from the root compose file only where CasaOS forces it to: settings are
-inline rather than in `.env`, because CasaOS keeps the compose in a directory of
-its own where a relative `env_file` path does not resolve; data is a `/DATA` bind
-mount rather than a named volume, so CasaOS's file manager and backups can see it;
-and an `x-casaos` block gives it a real tile.
+**Use a new tunnel, not the one already serving another hostname.** The same token
+in two places makes two replicas of one tunnel, and Cloudflare hands either
+replica any hostname that tunnel serves — so about half the traffic for the other
+site would land on this container, which cannot route it. Create a second tunnel
+in Zero Trust, give it a Public Hostname of `gehan.cloud` → `HTTP` →
+`gehan-cloud:8080`, and paste its token into `TUNNEL_TOKEN`.
 
-That tile opens `https://gehan.cloud` rather than a LAN port, because there is no
-published port to open — see below.
+Because CasaOS stores the compose as you paste it, that token is visible in the
+app's settings. Treat the CasaOS UI as somewhere the secret lives; if it leaks,
+delete the tunnel and the token dies with it.
+
+Three things differ from the root compose file, each forced by CasaOS:
+
+| | |
+| --- | --- |
+| Settings are inline, not `env_file` | CasaOS keeps the compose in a directory of its own, where a relative `.env` path does not resolve — the app would come up unconfigured |
+| `/DATA/AppData` bind mount, not a named volume | So CasaOS's file manager and backups can see the database |
+| An `x-casaos` block | Gives it a real tile, which opens `https://gehan.cloud` rather than a LAN port |
+
+The two services share a user-defined network so Docker's embedded DNS resolves
+`gehan-cloud`. Do not set `network_mode: bridge` on either: the default bridge
+does not resolve container names, and cloudflared would never find the portal.
 
 ### Why no published port
 

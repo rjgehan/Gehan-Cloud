@@ -1,81 +1,116 @@
-# Gehan Cloud as a CasaOS app.
+# Gehan Cloud on CasaOS - portal and its own Cloudflare tunnel, one stack.
 #
-# CasaOS: + → Custom Install → Import (the ⋯ menu) → paste this file.
+# ---------------------------------------------------------------------------
+# BEFORE YOU IMPORT
+# ---------------------------------------------------------------------------
 #
-# Two things must exist BEFORE importing, or the app will start and then fail:
+# 1. The data directory, owned by the UID the image runs as. Without this the
+#    app starts, fails to create users.db, and dies:
 #
-#   # 1. the data directory, owned by the UID the container runs as
-#   sudo mkdir -p /DATA/AppData/gehan-cloud/data
-#   sudo chown -R 10001:10001 /DATA/AppData/gehan-cloud/data
+#      sudo mkdir -p /DATA/AppData/gehan-cloud
+#      sudo chown -R 10001:10001 /DATA/AppData/gehan-cloud
 #
-#   # 2. the network the tunnel is on, so cloudflared can resolve this by name
-#   sudo docker network create edge
-#   sudo docker network connect edge cloudflared
+# 2. A NEW tunnel, not the one already serving meals.gehan.cloud. Cloudflare
+#    Zero Trust -> Networks -> Tunnels -> Create a tunnel -> Docker. Copy the
+#    token out of the command it shows you and paste it below.
 #
-# Then fill in the two values marked CHANGE ME below and import.
+#    Do NOT reuse the meals tunnel token here. The same token in two places
+#    makes two replicas of ONE tunnel, and Cloudflare will hand either replica
+#    any hostname that tunnel serves - so roughly half of meals.gehan.cloud
+#    would land on this container, which cannot route it, and fail.
 #
-# This differs from the root docker-compose.yml in three ways, all forced by
-# CasaOS: the settings are inline rather than in .env (CasaOS keeps the compose
-# in its own directory, so a relative env_file path does not resolve), the data
-# lives in a /DATA bind mount rather than a named volume so CasaOS's file manager
-# and backups can see it, and there is an x-casaos block so it gets a real tile.
+# 3. In that new tunnel, add a Public Hostname:
+#      Subdomain (blank) . Domain gehan.cloud . Service HTTP . URL gehan-cloud:8080
+#
+# 4. If you already installed this as "epic_aaron", uninstall it first. This
+#    file uses a different app name, so CasaOS would otherwise run both and they
+#    would collide on the container name.
+#
+# Then: CasaOS -> + -> Custom Install -> Import -> paste -> fill in the two
+# CHANGE ME values below.
 
 name: gehan-cloud
 
 services:
+
+  # --- the portal ----------------------------------------------------------
   gehan-cloud:
     image: ghcr.io/rjgehan/gehan-cloud:latest
     container_name: gehan-cloud
+    hostname: gehan-cloud
     restart: unless-stopped
+    cpu_shares: 90
+
+    # 64G was the CasaOS slider default. A Spring Boot app with a SQLite file
+    # does not need it: Java 21 reads the container limit and sizes its heap to
+    # a quarter of it, so this gives it a 256M heap and room to breathe.
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
 
     environment:
-      # --- required ---------------------------------------------------------
-      BASE_DOMAIN: gehan.cloud
+      # The domain this portal serves. Builds the login URL and limits where a
+      # login is allowed to send you back to.
+      - BASE_DOMAIN=gehan.cloud
 
-      # No leading dot. Tomcat validates this per RFC 6265 and rejects
-      # ".gehan.cloud" outright, which turns every login into a 500.
-      SERVER_SERVLET_SESSION_COOKIE_DOMAIN: gehan.cloud
+      # Sends the session cookie to every subdomain. NO LEADING DOT - Tomcat
+      # validates this per RFC 6265, rejects ".gehan.cloud", and every single
+      # login turns into a 500 with nothing useful in the log.
+      - SERVER_SERVLET_SESSION_COOKIE_DOMAIN=gehan.cloud
 
       # Must be CF-Connecting-IP behind Cloudflare. The edge APPENDS the real
-      # address to any X-Forwarded-For the visitor sent rather than replacing it,
-      # and the app reads that header's first entry - so without this a visitor
-      # can claim any address they like and TRUSTED_NETWORKS believes it.
-      CLIENT_IP_HEADER: CF-Connecting-IP
+      # address to any X-Forwarded-For the visitor sent rather than replacing
+      # it, and the app reads that header first entry - so without this a
+      # visitor can claim any address they like and TRUSTED_NETWORKS below
+      # believes them.
+      - CLIENT_IP_HEADER=CF-Connecting-IP
 
-      # --- CHANGE ME --------------------------------------------------------
-      # The PUBLIC address of each house, as /32, comma separated. Loading
-      # gehan.cloud goes out to the internet and back, so you arrive looking like
-      # your router - not your 192.168 address. Leave empty for now: sign in as
-      # admin from each house, read the address off /users, then come back and
-      # fill this in. Until then the Dashboard tile just stays grey.
-      TRUSTED_NETWORKS: ""
+      # CHANGE ME, once you can. The PUBLIC address of each house as /32, comma
+      # separated - not the 192.168 range. Loading gehan.cloud goes out to the
+      # internet and back, so you arrive looking like your router.
+      #
+      # Leave empty for now. Sign in as admin from each house, read the address
+      # off /users, then come back and fill it in. Until then the Dashboard tile
+      # is simply grey; nothing is broken and nothing is exposed.
+      #
+      #   example: TRUSTED_NETWORKS=203.0.113.7/32,198.51.100.22/32
+      - TRUSTED_NETWORKS=
 
-      # Container writes users.db here; matches the bind mount below.
-      APP_DATA_DIR: /data
-
-      # --- optional ---------------------------------------------------------
-      TZ: America/New_York
-      # LOG_LEVEL: INFO
-      # APP_LOG_LEVEL: INFO
+      - APP_DATA_DIR=/data
+      - TZ=America/New_York
 
     volumes:
-      # CasaOS convention, so this shows up in its Files app and gets backed up.
-      # MUST be chowned to 10001:10001 first - the image runs as that UID and a
-      # bind mount arrives owned by root, so without the chown the app cannot
-      # create users.db and dies on startup.
-      - /DATA/AppData/gehan-cloud/data:/data
+      # Must be chowned to 10001:10001 first - see step 1 above. Losing this
+      # directory loses every password the family has claimed.
+      - type: bind
+        source: /DATA/AppData/gehan-cloud
+        target: /data
 
     networks:
-      - edge
+      - gehan
 
-    # Deliberately no `ports:`. Two reasons, and the second is the one that bites:
+    # No `ports:` and no `network_mode: bridge`. Both matter:
     #
-    #   1. CLIENT_IP_HEADER above only holds while the tunnel is the single route
-    #      in. Anything that can open a socket to 8080 can send CF-Connecting-IP.
-    #   2. The session cookie is Secure, so it is never sent over plain HTTP.
-    #      Reaching this at http://<server-ip>:8080 would show you a login form
-    #      that silently refuses to log you in, which is a miserable thing to
-    #      debug. Use https://gehan.cloud - that is what the tile opens.
+    #   network_mode: bridge puts this on the default bridge, where container
+    #   names do NOT resolve - cloudflared would never find it.
+    #
+    #   Publishing 8082 would serve the login form over plain HTTP on the LAN,
+    #   and the session cookie is Secure, so it is never sent over HTTP. You get
+    #   a login page that accepts your password and just returns you to the
+    #   login page, with nothing in the logs. Use https://gehan.cloud at home
+    #   too - that is what the tile opens.
+    #
+    # If you decide you want LAN access anyway, it needs BOTH of these, and the
+    # second one is a real trade - it stops the cookie being HTTPS-only
+    # everywhere, including through the tunnel:
+    #
+    #   ports:
+    #     - target: 8080
+    #       published: "8082"
+    #       protocol: tcp
+    #   environment:
+    #     - SESSION_COOKIE_SECURE=false
 
     security_opt:
       - no-new-privileges:true
@@ -95,18 +130,19 @@ services:
 
     labels:
       com.centurylinklabs.watchtower.enable: "true"
+      icon: https://raw.githubusercontent.com/rjgehan/Gehan-Cloud/main/src/main/resources/static/apple-touch-icon.png
 
     x-casaos:
       envs:
         - container: BASE_DOMAIN
           description:
-            en_us: The domain this portal serves. Builds the login URL and limits where a login may return you.
+            en_us: The domain this portal serves.
         - container: SERVER_SERVLET_SESSION_COOKIE_DOMAIN
           description:
             en_us: Sends the session cookie to every subdomain. No leading dot, or every login returns 500.
         - container: CLIENT_IP_HEADER
           description:
-            en_us: Where to read the visitor's address from. CF-Connecting-IP behind Cloudflare.
+            en_us: Where to read the visitor address from. CF-Connecting-IP behind Cloudflare.
         - container: TRUSTED_NETWORKS
           description:
             en_us: Public address of each house as /32, comma separated. Decides whether the Dashboard tile is live. Read yours off /users.
@@ -118,12 +154,54 @@ services:
           description:
             en_us: Holds users.db. Must be owned by UID 10001. Losing this loses every claimed password.
 
+  # --- the tunnel ----------------------------------------------------------
+  # Dials out to Cloudflare and holds the connection open. Nothing listens on
+  # the server public interface, so there is no port to forward on the router
+  # and no public IP needed.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: gehan-cloud-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+
+    environment:
+      # CHANGE ME. Token for the NEW tunnel from step 2 - not the meals one.
+      #
+      # This token IS the tunnel: anything holding it can serve traffic for the
+      # hostname. CasaOS stores this file as you paste it and shows it in the
+      # app settings, so treat the CasaOS UI as somewhere this secret lives.
+      # If it leaks, delete the tunnel in the dashboard; the token dies with it.
+      - TUNNEL_TOKEN=PASTE_YOUR_TUNNEL_TOKEN_HERE
+      - TZ=America/New_York
+
+    networks:
+      - gehan
+
+    # Plain dependency, not condition: service_healthy. If the portal goes
+    # unhealthy we still want the tunnel up to answer with a 502, rather than
+    # the hostname failing at Cloudflare entirely.
+    depends_on:
+      - gehan-cloud
+
+    security_opt:
+      - no-new-privileges:true
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
 networks:
-  # External because the tunnel belongs to its own stack. Both containers have to
-  # sit on it for cloudflared to resolve `gehan-cloud` by name.
-  edge:
-    name: edge
-    external: true
+  # A user-defined network, which is the whole point: on this one Docker
+  # embedded DNS resolves `gehan-cloud` to the portal, so the tunnel ingress
+  # rule can say gehan-cloud:8080. On the default bridge it could not.
+  gehan:
+    name: gehan-cloud
+    driver: bridge
 
 x-casaos:
   architectures:
@@ -134,33 +212,36 @@ x-casaos:
   developer: rjgehan
   category: Network
   title:
+    custom: ""
     en_us: Gehan Cloud
   tagline:
     en_us: One page the family can remember, with a tile for everything else.
   description:
     en_us: >-
       Self-hosted launcher for the services on gehan.cloud. Form login with
-      passwords claimed at first use, an admin-only user console, and a tile page
-      driven by apps.yml. Reached over the existing Cloudflare tunnel, so nothing
-      listens on the server's public interface.
+      passwords claimed at first use, an admin-only user console, and a tile
+      page driven by apps.yml. Ships with its own Cloudflare tunnel, so nothing
+      listens on the server public interface.
   icon: https://raw.githubusercontent.com/rjgehan/Gehan-Cloud/main/src/main/resources/static/apple-touch-icon.png
   thumbnail: ""
   screenshot_link: []
 
-  # The tile opens the real site rather than a LAN port. There is no published
-  # port to open, and the Secure session cookie means plain HTTP would not log
-  # anyone in anyway.
+  # The tile opens the real site. There is no published port to open, and plain
+  # HTTP would not log anyone in anyway because the session cookie is Secure.
   scheme: https
   hostname: gehan.cloud
   index: /
   port_map: "8080"
+  is_uncontrolled: false
+  store_app_id: gehan-cloud
 
   tips:
     before_install:
       en_us: >-
-        Run these on the server first, or the app will start and immediately die:
-        sudo mkdir -p /DATA/AppData/gehan-cloud/data && sudo chown -R 10001:10001
-        /DATA/AppData/gehan-cloud/data, then sudo docker network create edge &&
-        sudo docker network connect edge cloudflared. After it is up, sign in at
-        https://gehan.cloud as admin immediately - the first password typed claims
-        the account.
+        Run these first or the app will die on startup: sudo mkdir -p
+        /DATA/AppData/gehan-cloud && sudo chown -R 10001:10001
+        /DATA/AppData/gehan-cloud. You also need a NEW Cloudflare tunnel token
+        pasted into TUNNEL_TOKEN - do not reuse the one serving meals.gehan.cloud,
+        or half that site traffic will land here and fail. After it is up, sign
+        in at https://gehan.cloud as admin immediately; the first password typed
+        claims the account.
