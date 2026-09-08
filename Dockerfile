@@ -9,7 +9,7 @@
 # architecture-independent, so the same build output ships to every target arch
 # and only the JRE base image below differs. Without this pin, an arm64 target
 # would run the whole Maven build under QEMU emulation.
-FROM --platform=$BUILDPLATFORM maven:3.9-eclipse-temurin-21 AS build
+FROM --platform=$BUILDPLATFORM maven:3-eclipse-temurin-26 AS build
 WORKDIR /build
 
 # Resolve dependencies in their own layer so code-only changes reuse the cache.
