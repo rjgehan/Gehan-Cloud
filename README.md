@@ -327,7 +327,7 @@ forward-auth probe by itself — this shape needs a proxy behind the tunnel.
 
 ### Two houses, one tile
 
-Both dashboards answer at the same private address, `192.168.1.23:8080`, one on
+Both dashboards answer at the same private address, `192.168.1.23:8088`, one on
 each house's network. So a single tile serves both: the address itself resolves to
 whichever house you are standing in, and neither dashboard is published or
 reachable from outside.
