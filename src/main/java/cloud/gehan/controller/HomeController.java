@@ -1,6 +1,7 @@
 package cloud.gehan.controller;
 
 import cloud.gehan.config.PortalProperties;
+import cloud.gehan.security.ClientAddress;
 import cloud.gehan.security.LocalNetwork;
 import cloud.gehan.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,10 +16,13 @@ public class HomeController {
 
     private final PortalProperties portal;
     private final LocalNetwork localNetwork;
+    private final ClientAddress clientAddress;
 
-    public HomeController(PortalProperties portal, LocalNetwork localNetwork) {
+    public HomeController(PortalProperties portal, LocalNetwork localNetwork,
+                          ClientAddress clientAddress) {
         this.portal = portal;
         this.localNetwork = localNetwork;
+        this.clientAddress = clientAddress;
     }
 
     /** Serves the portal with the tiles this viewer is allowed to see. */
@@ -29,9 +33,9 @@ public class HomeController {
                 .anyMatch(("ROLE_" + UserService.ROLE_ADMIN)::equals);
         model.addAttribute("isAdmin", admin);
         model.addAttribute("apps", portal.visibleTo(admin));
-        // getRemoteAddr carries the real client address: ForwardedHeaderFilter applies
-        // X-Forwarded-For to the request when running behind the proxy.
-        model.addAttribute("onLan", localNetwork.includes(request.getRemoteAddr()));
+        // ClientAddress resolves which of the forwarding headers to believe; behind
+        // Cloudflare that is CF-Connecting-IP rather than X-Forwarded-For.
+        model.addAttribute("onLan", localNetwork.includes(clientAddress.of(request)));
         return "index";
     }
 }

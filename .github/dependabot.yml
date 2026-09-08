@@ -1,0 +1,54 @@
+# The README used to note that automated dependency updates were not enabled.
+# This is that. Updates are grouped so a quiet week is one PR rather than nine.
+version: 2
+
+updates:
+  # Spring Boot and friends. The parent POM pins most versions, so in practice this
+  # is the Boot bump plus the handful of dependencies pinned directly in pom.xml
+  # (sqlite-jdbc, hibernate-community-dialects).
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: weekly
+      day: sunday
+      time: "06:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+    groups:
+      # Patch and minor together: these are the ones CI passing is good evidence for.
+      # Majors stay separate so a Boot 4 upgrade arrives as its own PR to read.
+      spring-and-friends:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    labels: ["dependencies", "java"]
+    commit-message:
+      prefix: deps
+
+  # Base images in the Dockerfile: maven:3.9-eclipse-temurin-21 and
+  # eclipse-temurin:21-jre-noble. Where the JRE CVEs actually get fixed.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: sunday
+      time: "06:00"
+      timezone: America/New_York
+    labels: ["dependencies", "docker"]
+    commit-message:
+      prefix: deps
+
+  # The actions in ci.yml and publish.yml, which are pinned to major tags and
+  # otherwise drift silently.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: sunday
+      time: "06:00"
+      timezone: America/New_York
+    groups:
+      actions:
+        patterns: ["*"]
+    labels: ["dependencies", "github-actions"]
+    commit-message:
+      prefix: ci

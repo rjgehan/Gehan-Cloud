@@ -19,3 +19,8 @@ grocery.json
 README.md
 LICENSE
 HELP.md
+
+# Deployment descriptors - the server reads these, the image never does.
+docker-compose.yml
+docker-compose.*.yml
+.env.example

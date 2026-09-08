@@ -1,6 +1,7 @@
 package cloud.gehan.controller;
 
 import cloud.gehan.config.PortalProperties;
+import cloud.gehan.security.ClientAddress;
 import cloud.gehan.security.LocalNetwork;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
@@ -28,11 +29,14 @@ public class AuthProbeController {
 
     private final PortalProperties portal;
     private final LocalNetwork localNetwork;
+    private final ClientAddress clientAddress;
     private final AuthenticationTrustResolver trustResolver = new AuthenticationTrustResolverImpl();
 
-    public AuthProbeController(PortalProperties portal, LocalNetwork localNetwork) {
+    public AuthProbeController(PortalProperties portal, LocalNetwork localNetwork,
+                               ClientAddress clientAddress) {
         this.portal = portal;
         this.localNetwork = localNetwork;
+        this.clientAddress = clientAddress;
     }
 
     @GetMapping("/__auth")
@@ -56,12 +60,12 @@ public class AuthProbeController {
      * that should quietly turn into the launcher when you are not at home.
      *
      * <p>Like the tiles, this is presentation backed by the proxy: it holds only while
-     * the proxy is the one setting X-Forwarded-For. It is not a substitute for the
-     * service having its own login.
+     * the proxy is the one setting the address header ClientAddress reads. It is not a
+     * substitute for the service having its own login.
      */
     @GetMapping("/__lan")
     public ResponseEntity<Void> localOnly(HttpServletRequest request) {
-        if (localNetwork.includes(request.getRemoteAddr())) {
+        if (localNetwork.includes(clientAddress.of(request))) {
             return ResponseEntity.ok().build();
         }
         return ResponseEntity.status(HttpStatus.FOUND)

@@ -1,5 +1,6 @@
 package cloud.gehan.controller;
 
+import cloud.gehan.security.ClientAddress;
 import cloud.gehan.security.LocalNetwork;
 import cloud.gehan.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,10 +21,13 @@ public class UserAdminController {
 
     private final UserService userService;
     private final LocalNetwork localNetwork;
+    private final ClientAddress clientAddress;
 
-    public UserAdminController(UserService userService, LocalNetwork localNetwork) {
+    public UserAdminController(UserService userService, LocalNetwork localNetwork,
+                               ClientAddress clientAddress) {
         this.userService = userService;
         this.localNetwork = localNetwork;
+        this.clientAddress = clientAddress;
     }
 
     @GetMapping
@@ -32,8 +36,9 @@ public class UserAdminController {
         model.addAttribute("currentUsername", authentication.getName());
         // Shown so portal.trusted-networks can be set from what the app actually sees,
         // rather than from a guess about how the proxy and NAT rewrite things.
-        model.addAttribute("clientIp", request.getRemoteAddr());
-        model.addAttribute("clientOnLan", localNetwork.includes(request.getRemoteAddr()));
+        String ip = clientAddress.of(request);
+        model.addAttribute("clientIp", ip);
+        model.addAttribute("clientOnLan", localNetwork.includes(ip));
         return "users";
     }
 

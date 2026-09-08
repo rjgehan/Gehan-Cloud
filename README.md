@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/rjgehan/Gehan-Cloud/actions/workflows/ci.yml/badge.svg)](https://github.com/rjgehan/Gehan-Cloud/actions/workflows/ci.yml)
 [![Publish image](https://github.com/rjgehan/Gehan-Cloud/actions/workflows/publish.yml/badge.svg)](https://github.com/rjgehan/Gehan-Cloud/actions/workflows/publish.yml)
+[![CodeQL](https://github.com/rjgehan/Gehan-Cloud/actions/workflows/codeql.yml/badge.svg)](https://github.com/rjgehan/Gehan-Cloud/actions/workflows/codeql.yml)
 [![Java 21](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/projects/jdk/21/)
 [![Spring Boot 3.5](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F)](https://spring.io/projects/spring-boot)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -55,6 +56,7 @@ one grid and every link still works.
 | Storage | SQLite, one table of users |
 | Auth | Session form login, BCrypt hashing |
 | Container | Multi-stage Docker build, layered Spring Boot jar, multi-arch |
+| Ingress | Cloudflare Tunnel — nothing listens on the server's public interface |
 | CI/CD | GitHub Actions to GHCR, Watchtower on the server |
 
 ## Architecture
@@ -62,10 +64,17 @@ one grid and every link still works.
 ```
                     browser
                        |
+                       v   https
+      +------------------------------------+
+      |  Cloudflare edge (TLS, DNS)        |
+      +----------------+-------------------+
+                       |   tunnel, dialled outbound from the server:
+                       |   no open port, no forwarded port, no public IP
                        v
       +------------------------------------+
-      |  Traefik (TLS, reverse proxy)      |
+      |  cloudflared                       |
       +----------------+-------------------+
+                       |   http://gehan-cloud:8080 over a Docker network
                        v
       +------------------------------------+
       |  Spring Boot                       |
@@ -122,6 +131,7 @@ Nothing sensitive lives in `application.properties`. See
 | --- | --- | --- |
 | `APP_DATA_DIR` | `.` | Directory holding `users.db`. The container sets it to `/data`. |
 | `APP_BOOTSTRAP_ADMIN` | `admin` | Username created when the database is empty. |
+| `CLIENT_IP_HEADER` | unset | Header carrying the visitor's address. `CF-Connecting-IP` behind Cloudflare — see [Which address the app believes](#which-address-the-app-believes). |
 | `LOG_LEVEL` / `APP_LOG_LEVEL` | `INFO` | Root and application log levels. |
 
 ## Adding a service to the portal
@@ -155,6 +165,21 @@ single grid and every link still works.
 
 
 ## Putting another service behind this login
+
+> **This needs a reverse proxy, and the tunnel is not one.** `cloudflared` routes
+> a hostname to a backend and nothing else — it has no forward-auth, so it cannot
+> call `/__auth` and act on the answer. Two ways to have it:
+>
+> - **Run a proxy behind the tunnel.** Point `cloudflared` at Traefik instead of
+>   at each service, and let Traefik do the `forwardAuth` exactly as below. The
+>   tunnel becomes one more hop and the rest of this section is unchanged.
+> - **Use Cloudflare Access.** Cloudflare authenticates at the edge, before the
+>   request reaches the server. It does not use this portal's accounts, so the
+>   family would have a second set of credentials.
+>
+> Nothing uses either today: both dashboards are private and Photoprism brings
+> its own login. `/__auth` and `/__lan` are kept for the first service that needs
+> one, and the recipes below are the Traefik-behind-the-tunnel shape.
 
 Services running on other machines can be reached through this domain without
 being exposed themselves. The server is on both the public internet and the
@@ -297,9 +322,8 @@ site from another — everything gated this way is gated to the same set of
 networks. That is fine as things stand and is worth understanding before adding a
 second gate. See [Two houses, one tile](#two-houses-one-tile).
 
-Nothing attaches this middleware today, and neither probe is in use: both
-dashboards are private and Photoprism brings its own login. They are kept as the
-answer for the next service that needs one.
+Nothing attaches this middleware today. As above, `cloudflared` cannot call a
+forward-auth probe by itself — this shape needs a proxy behind the tunnel.
 
 ### Two houses, one tile
 
@@ -325,6 +349,33 @@ The greying matters more here than usual. `192.168.1.x` is the most common home
 network there is, so on someone else's wifi `.23` is quite likely to be a real
 device — a printer, a router page, a camera. `lanOnly` is what keeps the tile from
 being a live link to a stranger's hardware.
+
+### Which address the app believes
+
+`TRUSTED_NETWORKS` is only as good as the address it is compared against, and
+behind Cloudflare the obvious one is wrong.
+
+Spring's `ForwardedHeaderFilter` resolves `getRemoteAddr()` to the **first** entry
+of `X-Forwarded-For`. That is right for a proxy that owns the header. Cloudflare
+does not own it: the edge *appends* the real address to whatever the visitor sent,
+so a request carrying `X-Forwarded-For: 203.0.113.9` arrives as
+
+```
+X-Forwarded-For: 203.0.113.9, <the visitor's real address>
+```
+
+and the first entry — the one the app would read — is the visitor's own invention.
+Anyone could claim to be standing in either house.
+
+`CF-Connecting-IP` is written by the edge on every request and cannot be supplied
+by the visitor. Setting `CLIENT_IP_HEADER=CF-Connecting-IP` reads that instead,
+falling back to the remote address when the header is absent so a direct hit on
+the LAN still resolves sensibly. That is what [`ClientAddress`](src/main/java/cloud/gehan/security/ClientAddress.java)
+does, and `.env.example` sets it.
+
+It holds only while the tunnel is the sole route to the container: anything that
+can open a socket to port 8080 can send the header itself. Which is why
+[`docker-compose.yml`](docker-compose.yml) publishes no port.
 
 ### Why the network list is safe to rely on here
 
@@ -408,10 +459,15 @@ address from a header the proxy sets. What actually keeps those services private
 is that they are not published. Do not let a proxy trust client-supplied
 forwarding headers — in Traefik, leave `forwardedHeaders.insecure` off.
 
-**No automated dependency updates.** Dependabot is not enabled on this repo.
+**The login is the only thing standing between the internet and the portal.**
+The tunnel publishes `gehan.cloud` to everyone; Cloudflare does not authenticate
+anyone on its own. If you want a second gate in front, that is Cloudflare Access,
+configured on the Cloudflare side rather than here.
 
 
 ## Deployment
+
+### The image
 
 Every push to `main` runs the tests, builds the container, and publishes it to
 GitHub Container Registry:
@@ -424,10 +480,141 @@ Images are published for `linux/amd64` and `linux/arm64`. Maven runs natively on
 the build platform either way — a Spring Boot jar is architecture-independent, so
 only the JRE base layer differs and nothing is built under emulation.
 
+Alongside `latest`, every build is tagged `sha-<commit>`, and `v*` tags publish
+semver tags. Pin `IMAGE_TAG` to a `sha-` tag when you want to hold a known-good
+build.
+
 The server pulls that tag; there is no SSH step, no deploy key, and nothing
-inbound to the server. The container reads its configuration from the
-environment ([`.env.example`](.env.example)) and keeps `users.db` in `/data`,
-so mount a volume there to persist it across redeploys.
+inbound to the server.
+
+### The server
+
+[`docker-compose.yml`](docker-compose.yml) is the whole deployment. It runs the
+portal with no published port at all — the only route in is the tunnel, which
+`cloudflared` dials outward. The server needs no open port, no port forwarding on
+the router, and no public IP.
+
+`cloudflared` already runs on this host for the other services, so the portal
+joins the Docker network it is on rather than starting a second tunnel:
+
+```bash
+docker network create edge                  # once, if it does not exist
+docker network connect edge cloudflared     # once, so the tunnel can resolve us
+
+git clone https://github.com/rjgehan/Gehan-Cloud.git && cd Gehan-Cloud
+cp .env.example .env
+$EDITOR .env                                # see the notes in the file
+docker compose up -d
+```
+
+Compose gives the container the network alias `gehan-cloud`, which is the name
+the tunnel routes to. Check it came up before touching the Cloudflare side:
+
+```bash
+docker compose ps                           # healthy, not just running
+docker compose logs -f gehan-cloud
+docker run --rm --network edge curlimages/curl -sI http://gehan-cloud:8080/login
+```
+
+That last one should return `302` to `/login` or `200` — proof the tunnel will be
+able to reach it.
+
+`users.db` lives in the named volume `gehan-cloud-data`, mounted at `/data`.
+Without it, every redeploy starts from an empty database: a fresh unclaimed admin
+account and the loss of every password the family has claimed.
+
+### The Cloudflare side
+
+Add `gehan.cloud` to the existing tunnel, pointing at `http://gehan-cloud:8080`.
+Where that goes depends on how the tunnel is configured — check which one you
+have with `docker inspect cloudflared --format '{{join .Config.Cmd " "}}'`:
+
+**Dashboard-managed** (the command contains `--token`, or `TUNNEL_TOKEN` is in the
+environment). Zero Trust → Networks → Tunnels → your tunnel → **Public Hostname**
+→ Add:
+
+| Field | Value |
+| --- | --- |
+| Subdomain | *(blank)* |
+| Domain | `gehan.cloud` |
+| Path | *(blank)* |
+| Service | `HTTP` → `gehan-cloud:8080` |
+
+Add a second hostname for `www` if you want it. Saving creates the DNS record.
+
+**Locally-managed** (the command names a `config.yml`). Add an ingress rule
+*above* the catch-all, which must stay last:
+
+```yaml
+ingress:
+  - hostname: gehan.cloud
+    service: http://gehan-cloud:8080
+  # ... the existing rules, e.g. meals.gehan.cloud ...
+  - service: http_status:404      # always last
+```
+
+Then create the DNS record and restart the tunnel:
+
+```bash
+cloudflared tunnel route dns <tunnel-name> gehan.cloud
+docker restart cloudflared
+```
+
+Either way, on the DNS page the record for `gehan.cloud` must be **proxied**
+(orange cloud). Grey-clouded, the tunnel is bypassed and `CF-Connecting-IP` never
+arrives.
+
+### Go-live checklist
+
+1. `BASE_DOMAIN=gehan.cloud` and `SERVER_SERVLET_SESSION_COOKIE_DOMAIN=gehan.cloud`
+   in `.env`. No leading dot on the cookie domain — Tomcat rejects `.gehan.cloud`
+   and every login 500s.
+2. `CLIENT_IP_HEADER=CF-Connecting-IP` — see
+   [Which address the app believes](#which-address-the-app-believes).
+3. In Cloudflare, SSL/TLS encryption mode **Full (strict)** and **Always Use
+   HTTPS** on. The session cookie is `Secure`, so it is never sent over plain HTTP
+   and login silently fails without this.
+4. Load `https://gehan.cloud` and **sign in as `admin` immediately.** The first
+   password typed claims the account, and until then anyone who reaches the login
+   page can claim it. This is the one step with a clock on it.
+5. Create the family's accounts from `/users`, and tell each person to log in
+   promptly — the same claiming rule applies to them.
+6. Still on `/users`, read off the address it says you arrived from. Do this once
+   from each house and put both in `TRUSTED_NETWORKS` as `/32`s, then
+   `docker compose up -d` to apply. Until then the Dashboard tile stays grey at
+   home. Home addresses rotate, so expect to redo this occasionally.
+7. Consider a rate limit in front of `/login`. Nothing in the app limits guessing,
+   and the tunnel publishes it to everyone. A Cloudflare WAF rate-limiting rule on
+   `POST /login` is the least effort here.
+
+### Updates
+
+Watchtower polls GHCR and restarts the container when `latest` moves. If the
+server already runs one for its other stacks, that instance covers this container
+too — it opts in with the `com.centurylinklabs.watchtower.enable` label. Otherwise
+start the bundled one:
+
+```bash
+docker compose --profile watchtower up -d
+```
+
+To deploy by hand instead, or to roll back to a pinned `IMAGE_TAG`:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+### Continuous integration
+
+| Workflow | Trigger | What it does |
+| --- | --- | --- |
+| [`ci.yml`](.github/workflows/ci.yml) | push, PR | `./mvnw verify` |
+| [`publish.yml`](.github/workflows/publish.yml) | push to `main`, `v*` tags | Tests, then builds and pushes multi-arch to GHCR |
+| [`codeql.yml`](.github/workflows/codeql.yml) | push, PR, weekly | Static analysis; results in the Security tab |
+| [`dependabot.yml`](.github/dependabot.yml) | weekly | Grouped update PRs for Maven, base images and Actions |
+
+CodeQL and Dependabot need **Code scanning** and **Dependabot alerts** switched on
+under Settings → Code security. Both are free on public repositories.
 
 ## Repository layout
 
@@ -437,13 +624,17 @@ src/main/java/cloud/gehan/
 ├── controller/   Home (launcher), Login, UserAdmin, AuthProbe
 ├── model/        User entity
 ├── repository/   Spring Data JPA
-├── security/     FirstLoginAuthenticationProvider, RedirectTargets, LocalNetwork
+├── security/     FirstLoginAuthenticationProvider, RedirectTargets,
+│                 LocalNetwork, ClientAddress
 └── service/      UserService — business rules and lockout guards
 
 src/main/resources/
 ├── apps.yml      the portal tile list — add services here
 ├── static/css/   home.css (portal), users.css
 └── templates/    index, login, users
+
+docker-compose.yml   the deployment: portal, optional Watchtower, optional tunnel
+.env.example         every setting the server needs, with the reasoning
 ```
 
 ## License

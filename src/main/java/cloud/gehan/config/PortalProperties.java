@@ -46,6 +46,22 @@ public class PortalProperties {
         this.trustedNetworks = trustedNetworks;
     }
 
+    /**
+     * Header carrying the visitor's address, when a proxy in front supplies one it
+     * fully controls. Behind Cloudflare set this to CF-Connecting-IP: the edge appends
+     * to X-Forwarded-For rather than replacing it, so the first entry there is
+     * whatever the visitor sent. Empty means trust the remote address as-is.
+     */
+    private String clientIpHeader = "";
+
+    public String getClientIpHeader() {
+        return clientIpHeader;
+    }
+
+    public void setClientIpHeader(String clientIpHeader) {
+        this.clientIpHeader = clientIpHeader;
+    }
+
     public List<AppLink> getApps() {
         return apps;
     }

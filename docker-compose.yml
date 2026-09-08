@@ -1,0 +1,119 @@
+# Gehan Cloud on the server, behind the Cloudflare tunnel that already runs there.
+#
+#   docker network create edge            # once, if it does not exist yet
+#   docker network connect edge cloudflared
+#   cp .env.example .env && $EDITOR .env
+#   docker compose up -d
+#
+# Nothing here publishes a port. The only route in is the tunnel: cloudflared holds
+# an outbound connection to Cloudflare and forwards to this container over the
+# `edge` network, so the server needs no open port, no forwarded port, and no
+# public IP. Add the hostname on the Cloudflare side pointing at:
+#
+#   http://gehan-cloud:8080
+#
+# See the Deployment section of README.md for where that goes.
+
+name: gehan-cloud
+
+services:
+  gehan-cloud:
+    image: ghcr.io/rjgehan/gehan-cloud:${IMAGE_TAG:-latest}
+    container_name: gehan-cloud
+    restart: unless-stopped
+
+    # Everything the app reads is in .env; see .env.example. Nothing sensitive is
+    # baked into the image or this file.
+    env_file:
+      - .env
+
+    # users.db lives here. Without this volume every redeploy starts from an empty
+    # database, which means a fresh unclaimed admin account and the loss of every
+    # password the family has claimed.
+    volumes:
+      - data:/data
+
+    networks:
+      - edge
+
+    # Deliberately no `ports:`. Publishing 8080 would put the portal on the LAN
+    # alongside the tunnel, and CLIENT_IP_HEADER only holds while Cloudflare is the
+    # single thing that can reach the app - anything that can open a socket to 8080
+    # can send CF-Connecting-IP itself.
+
+    security_opt:
+      - no-new-privileges:true
+
+    # The image already declares a HEALTHCHECK against /login; restated here only to
+    # give the container a start period long enough for a cold JVM on a small box.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/login >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+  # Optional: pulls a new ghcr.io/rjgehan/gehan-cloud:latest when CI publishes one
+  # and restarts the container. Skip it if the server already runs a Watchtower for
+  # its other stacks - one instance covers every container on the host.
+  #
+  #   docker compose --profile watchtower up -d
+  #
+  # Scoped to containers that opt in with the label above, so enabling it here does
+  # not quietly start updating everything else on the server.
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: gehan-cloud-watchtower
+    restart: unless-stopped
+    profiles: ["watchtower"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_POLL_INTERVAL: "300"
+      TZ: ${TZ:-America/New_York}
+
+  # Optional: only if you would rather this stack own a tunnel of its own instead of
+  # reusing the one already on the server. Needs TUNNEL_TOKEN in .env, from the
+  # Cloudflare Zero Trust dashboard.
+  #
+  #   docker compose --profile tunnel up -d
+  #
+  # With the existing tunnel - which is the setup here - leave this alone.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: gehan-cloud-tunnel
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run
+    environment:
+      # Plain default, not ${TUNNEL_TOKEN:?...}: Compose interpolates the whole file
+      # before it filters on profiles, so a required-variable marker here would fail
+      # `docker compose up -d` even though this service is not being started.
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    networks:
+      - edge
+    depends_on:
+      - gehan-cloud
+
+volumes:
+  data:
+    name: gehan-cloud-data
+
+networks:
+  # Shared with cloudflared so it can resolve `gehan-cloud` by name. External
+  # because the tunnel belongs to its own stack, not this one - Compose would
+  # otherwise create a second, separate network with the same intent.
+  edge:
+    name: ${EDGE_NETWORK:-edge}
+    external: true
