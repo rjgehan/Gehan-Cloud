@@ -84,9 +84,10 @@ services:
       TZ: ${TZ:-America/New_York}
 
   # Optional: only if you would rather this stack own a tunnel of its own instead of
-  # reusing the one already on the server. Needs TUNNEL_TOKEN in .env, from the
-  # Cloudflare Zero Trust dashboard.
+  # reusing the one already on the server. Take the token from the Cloudflare Zero
+  # Trust dashboard and put it in a file of its own:
   #
+  #   echo 'TUNNEL_TOKEN=...' > .env.tunnel
   #   docker compose --profile tunnel up -d
   #
   # With the existing tunnel - which is the setup here - leave this alone.
