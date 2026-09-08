@@ -7,6 +7,7 @@ target/
 *.db-wal
 grocery.json
 .env
+.env.tunnel
 
 # Repo metadata and editor config
 .git/

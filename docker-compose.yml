@@ -96,11 +96,11 @@ services:
     restart: unless-stopped
     profiles: ["tunnel"]
     command: tunnel --no-autoupdate run
-    environment:
-      # Plain default, not ${TUNNEL_TOKEN:?...}: Compose interpolates the whole file
-      # before it filters on profiles, so a required-variable marker here would fail
-      # `docker compose up -d` even though this service is not being started.
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    # Its own file, not .env: the token IS the tunnel, and .env is handed wholesale
+    # to the app container, which has no use for it. cloudflared reads TUNNEL_TOKEN
+    # from the environment itself, so nothing needs interpolating here.
+    env_file:
+      - .env.tunnel
     networks:
       - edge
     depends_on:
