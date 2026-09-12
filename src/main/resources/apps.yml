@@ -28,11 +28,6 @@ portal:
       icon: bi-images
       color: violet
 
-    - label: Grocery
-      url: https://grocery.gehan.cloud
-      icon: bi-cart-fill
-      color: amber
-
     - label: Meals
       url: https://meals.gehan.cloud
       icon: bi-egg-fried

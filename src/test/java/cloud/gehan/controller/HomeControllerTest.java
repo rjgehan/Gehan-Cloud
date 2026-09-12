@@ -25,7 +25,7 @@ class HomeControllerTest {
         mvc.perform(get("/").with(user("Jen").roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("class=\"apps\"")))
-                .andExpect(content().string(containsString("grocery.gehan.cloud")));
+                .andExpect(content().string(containsString("photos.gehan.cloud")));
     }
 
     @Test
