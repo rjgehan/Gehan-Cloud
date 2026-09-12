@@ -4,7 +4,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The portal's app tiles, loaded from apps.yml. Adding a service is a single
@@ -44,6 +46,24 @@ public class PortalProperties {
 
     public void setTrustedNetworks(List<String> trustedNetworks) {
         this.trustedNetworks = trustedNetworks;
+    }
+
+    /**
+     * Named groups within the trusted networks, e.g. portal.networks.home. A tile can
+     * then give a different url per group, for a service that sits at a different
+     * address in each place. Without this the app knows only that a visitor is on one
+     * of the trusted networks, not which - so two houses could not be told apart.
+     *
+     * <p>These are public addresses, so they belong in the environment, not in here.
+     */
+    private Map<String, List<String>> networks = new LinkedHashMap<>();
+
+    public Map<String, List<String>> getNetworks() {
+        return networks;
+    }
+
+    public void setNetworks(Map<String, List<String>> networks) {
+        this.networks = networks;
     }
 
     /**
@@ -102,6 +122,39 @@ public class PortalProperties {
             this.url = url;
         }
 
+        /**
+         * Per-network urls, keyed by a name from portal.networks. The entry matching the
+         * visitor's network wins, and {@code url} is the fallback when none does.
+         *
+         * <p>This is what lets one tile serve a service that lives in two places without
+         * the two boxes having to answer at the same address - which they did have to
+         * before, and which broke the moment one of them was handed a different lease.
+         */
+        private Map<String, String> urls = new LinkedHashMap<>();
+
+        public Map<String, String> getUrls() {
+            return urls;
+        }
+
+        public void setUrls(Map<String, String> urls) {
+            this.urls = urls;
+        }
+
+        /**
+         * The url to use for a visitor on the named network, or null when the tile has
+         * nothing for them. Null is what makes a lanOnly tile render without an href, so
+         * a private address belonging to the other house never reaches the page.
+         */
+        public String urlFor(String network) {
+            if (network != null) {
+                String match = urls.get(network);
+                if (match != null && !match.isBlank()) {
+                    return match;
+                }
+            }
+            return url;
+        }
+
         public String getIcon() {
             return icon;
         }
@@ -139,9 +192,15 @@ public class PortalProperties {
             this.lanOnly = lanOnly;
         }
 
+        /** True when the resolved link leaves this app, so those tiles open in a new tab. */
+        public boolean isExternalFor(String network) {
+            String target = urlFor(network);
+            return target != null && (target.startsWith("http://") || target.startsWith("https://"));
+        }
+
         /** True when the link leaves this app, so those tiles can open in a new tab. */
         public boolean isExternal() {
-            return url != null && (url.startsWith("http://") || url.startsWith("https://"));
+            return isExternalFor(null);
         }
     }
 }

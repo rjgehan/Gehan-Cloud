@@ -317,38 +317,66 @@ No session is needed for this one: it is a question about where you are, not who
 you are. Chain it with `portal-auth` when you want both — `middlewares:
 [home-only, portal-auth]` requires being at home *and* signed in.
 
-`/__lan` shares `portal.trusted-networks` with the tiles, so it cannot tell one
-site from another — everything gated this way is gated to the same set of
-networks. That is fine as things stand and is worth understanding before adding a
-second gate. See [Two houses, one tile](#two-houses-one-tile).
+`/__lan` answers from `portal.trusted-networks`, so it cannot tell one site from
+another — everything gated this way is gated to the same set of networks. Tiles can
+now tell the houses apart via `portal.networks`, but this probe still answers a
+plain yes/no. Worth understanding before gating a hostname to one house rather than
+to "any of mine". See [Two houses, one tile](#two-houses-one-tile).
 
 Nothing attaches this middleware today. As above, `cloudflared` cannot call a
 forward-auth probe by itself — this shape needs a proxy behind the tunnel.
 
 ### Two houses, one tile
 
-Both dashboards answer at the same private address, `192.168.1.23:8088`, one on
-each house's network. So a single tile serves both: the address itself resolves to
-whichever house you are standing in, and neither dashboard is published or
-reachable from outside.
-
-That also keeps the network list simple. Gating two different services to two
-different houses would need the list split into named groups, or standing in
-either house would unlock both. Pointing both houses at one address turns the
-question into "am I in one of my houses?", which one list answers:
+Each house has its own dashboard box, and one tile serves both. `TRUSTED_NETWORKS`
+decides whether the tile is live at all — "am I in one of my houses?" — and named
+groups decide *which* box it points at:
 
 ```properties
 TRUSTED_NETWORKS=<beach public address>/32,<home public address>/32
+HOME_NETWORKS=<home public address>/32
+BEACH_NETWORKS=<beach public address>/32
 ```
 
-It costs some uniformity. Both boxes have to answer on the same address and port,
-and both networks have to use the same range, or one house will not find its own
-dashboard.
+```yaml
+    - label: Dashboard
+      icon: bi-speedometer2
+      color: teal
+      lanOnly: true
+      urls:
+        home: http://192.168.1.23:8088
+        beach: http://192.168.1.210:8088
+```
+
+These are the **public** addresses of each house, not their `192.168` ranges: a
+visitor loads `gehan.cloud` over the internet, so they arrive looking like their
+router. `/users` shows an admin the address they arrived from and now names the
+group it matched, which is the quickest way to fill these in — and to notice when a
+residential address has rotated.
+
+Groups are matched in configured order, first match wins. A tile whose `urls` has
+no entry for your group falls back to its plain `url`, and a `lanOnly` tile with
+neither renders greyed out with no href — so one house's private address is never
+in the page you are served in the other.
+
+**This replaced a stricter arrangement**, worth knowing about if you see traces of
+it. Both boxes used to answer at the same address, `192.168.1.23:8088`, so one
+tile with one url served both — the address resolved to whichever house you stood
+in. It worked, but it forced both boxes onto the same address, the same port, and
+the same LAN range. The beach box was then handed a different DHCP lease, nothing
+answered at `.23` there any more, and the tile became a live link to nothing.
+Per-network urls remove the constraint: each house names its own address, and they
+need not agree.
 
 The greying matters more here than usual. `192.168.1.x` is the most common home
-network there is, so on someone else's wifi `.23` is quite likely to be a real
-device — a printer, a router page, a camera. `lanOnly` is what keeps the tile from
-being a live link to a stranger's hardware.
+network there is, so on someone else's wifi those addresses are quite likely to be
+a real device — a printer, a router page, a camera. `lanOnly` is what keeps the
+tile from being a live link to a stranger's hardware.
+
+One thing still needs a hand: a box on DHCP can be moved again, and the url here
+would go stale. A reservation on the router is the usual fix; failing that, some
+routers resolve their DHCP clients by hostname, in which case a name like
+`http://beachserver:8088` follows the box on its own.
 
 ### Which address the app believes
 

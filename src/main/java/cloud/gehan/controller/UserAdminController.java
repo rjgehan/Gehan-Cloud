@@ -39,6 +39,7 @@ public class UserAdminController {
         String ip = clientAddress.of(request);
         model.addAttribute("clientIp", ip);
         model.addAttribute("clientOnLan", localNetwork.includes(ip));
+        model.addAttribute("clientNetwork", localNetwork.nameFor(ip));
         return "users";
     }
 

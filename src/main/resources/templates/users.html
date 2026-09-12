@@ -23,7 +23,9 @@
                 <span th:text="'Signed in as ' + ${currentUsername}">Signed in as admin</span>
                 <span class="whoami-net">
                     from <code th:text="${clientIp}">0.0.0.0</code>
-                    <span th:if="${clientOnLan}">&middot; home network</span>
+                    <span th:if="${clientNetwork != null}">&middot;
+                        <span th:text="${clientNetwork}">home</span> network</span>
+                    <span th:if="${clientNetwork == null and clientOnLan}">&middot; local network</span>
                     <span th:unless="${clientOnLan}">&middot; outside</span>
                 </span>
             </span>

@@ -35,7 +35,11 @@ public class HomeController {
         model.addAttribute("apps", portal.visibleTo(admin));
         // ClientAddress resolves which of the forwarding headers to believe; behind
         // Cloudflare that is CF-Connecting-IP rather than X-Forwarded-For.
-        model.addAttribute("onLan", localNetwork.includes(clientAddress.of(request)));
+        String address = clientAddress.of(request);
+        model.addAttribute("onLan", localNetwork.includes(address));
+        // Which trusted network, where the groups are named. A tile with per-network
+        // urls uses this to pick one; null just means every tile falls back to its own.
+        model.addAttribute("network", localNetwork.nameFor(address));
         return "index";
     }
 }

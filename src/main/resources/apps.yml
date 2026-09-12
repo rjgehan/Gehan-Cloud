@@ -7,6 +7,10 @@
 #
 #   label      text under the icon. One short word reads best.
 #   url        absolute for another service, or /path for a page in this app.
+#   urls       a url per named network, for a service that sits at a different
+#              address in each place. Keys are groups from portal.networks; the
+#              visitor's network picks one, and url is the fallback when none
+#              matches. A lanOnly tile with no match and no url greys out.
 #   icon       any Bootstrap Icons name: https://icons.getbootstrap.com
 #   color      a palette from home.css: violet amber teal blue red green
 #              indigo pink cyan lime orange slate. Omitted means slate.
@@ -34,19 +38,37 @@ portal:
       icon: bi-egg-fried
       color: orange
 
-    # One tile for both dashboards. Neither is published; the address is a private
-    # one, so it resolves to whichever house you are standing in - home or beach.
-    # Both boxes must answer on 192.168.1.23:8088 for this to work. The beach box
-    # was moved from 8080 to match home, where 8080 was already taken.
+    # One tile, one dashboard box in each house. Neither is published.
     #
-    # lanOnly greys it out anywhere else. Without that it would still be a live
-    # link, and on someone else's 192.168.1.x network .23 is likely to be some
-    # stranger's printer or camera.
+    # urls picks by network: the keys are groups named in portal.networks, matched
+    # against the public address the visitor arrives from. Standing in a house gets
+    # you that house's box.
+    #
+    # This replaced an arrangement where both boxes had to answer at the same
+    # private address. That held until the beach box's DHCP lease moved it, and
+    # the tile became a live link to nothing. Now each house names its own address
+    # and they need not agree.
+    #
+    # The beach box is still on a lease, so if it moves again change it here. Its
+    # router resolves http://beachserver:8088 too, which would follow the box by
+    # itself - worth switching to once you have confirmed a phone resolves that name.
+    #
+    # url is the fallback for a visitor no group claims, and it is what this tile
+    # falls back to entirely when HOME_NETWORKS and BEACH_NETWORKS are unset - so a
+    # deploy that has not set them yet behaves as it did before, rather than greying
+    # the tile out in both houses.
+    #
+    # lanOnly greys the tile out for anyone off the trusted networks. Without it the
+    # tile would be a live link, and on someone else's 192.168.1.x network those
+    # addresses are quite likely to be a stranger's printer or camera.
     - label: Dashboard
-      url: http://192.168.1.23:8088
       icon: bi-speedometer2
       color: teal
       lanOnly: true
+      url: http://192.168.1.23:8088
+      urls:
+        home: http://192.168.1.23:8088
+        beach: http://192.168.1.210:8088
 
     - label: Users
       url: /users
