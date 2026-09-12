@@ -63,7 +63,23 @@ public class LocalNetwork {
         if (ip == null) {
             return false;
         }
-        for (IpAddressMatcher matcher : matchers) {
+        if (matchesAny(matchers, ip)) {
+            return true;
+        }
+        // A named group is one of my own networks by definition, so naming it is
+        // enough. Requiring the same address in portal.trusted-networks as well was
+        // a trap: replacing the one list with the named ones - the obvious reading -
+        // left every lanOnly tile greyed out in both houses.
+        for (List<IpAddressMatcher> group : named.values()) {
+            if (matchesAny(group, ip)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean matchesAny(List<IpAddressMatcher> candidates, String ip) {
+        for (IpAddressMatcher matcher : candidates) {
             try {
                 if (matcher.matches(ip)) {
                     return true;

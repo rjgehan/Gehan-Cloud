@@ -50,6 +50,45 @@ class LocalNetworkTest {
         assertThat(lan.nameFor(null)).isNull();
     }
 
+    /**
+     * The regression this was written for: naming the two houses and dropping the old
+     * combined list is the obvious way to configure this, and it used to grey out every
+     * lanOnly tile in both of them.
+     */
+    @Test
+    void aNamedGroupCountsAsLocalWithoutBeingRepeatedInTheTrustedList() {
+        PortalProperties portal = new PortalProperties();
+        portal.setTrustedNetworks(List.of());
+        LinkedHashMap<String, List<String>> groups = new LinkedHashMap<>();
+        groups.put("home", List.of("24.184.124.148/32"));
+        groups.put("beach", List.of("67.84.61.185/32"));
+        portal.setNetworks(groups);
+        LocalNetwork lan = new LocalNetwork(portal);
+
+        assertThat(lan.includes("67.84.61.185")).isTrue();
+        assertThat(lan.includes("24.184.124.148")).isTrue();
+        assertThat(lan.nameFor("67.84.61.185")).isEqualTo("beach");
+        assertThat(lan.includes("203.0.113.9")).isFalse();
+    }
+
+    /**
+     * A bare address, no /32. That is what gets typed into a CasaOS env field, so it
+     * had better mean the single host rather than being rejected.
+     */
+    @Test
+    void acceptsABareAddressAsASingleHost() {
+        PortalProperties portal = new PortalProperties();
+        portal.setTrustedNetworks(List.of());
+        LinkedHashMap<String, List<String>> groups = new LinkedHashMap<>();
+        groups.put("beach", List.of("67.84.61.185"));
+        portal.setNetworks(groups);
+        LocalNetwork lan = new LocalNetwork(portal);
+
+        assertThat(lan.includes("67.84.61.185")).isTrue();
+        assertThat(lan.nameFor("67.84.61.185")).isEqualTo("beach");
+        assertThat(lan.includes("67.84.61.186")).isFalse();
+    }
+
     @Test
     void namedGroupsDoNotDisturbTheTrustedList() {
         LocalNetwork lan = with("192.168.1.0/24");

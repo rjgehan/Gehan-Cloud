@@ -26,7 +26,7 @@
                     <span th:if="${clientNetwork != null}">&middot;
                         <span th:text="${clientNetwork}">home</span> network</span>
                     <span th:if="${clientNetwork == null and clientOnLan}">&middot; local network</span>
-                    <span th:unless="${clientOnLan}">&middot; outside</span>
+                    <span th:if="${clientNetwork == null and !clientOnLan}">&middot; outside</span>
                 </span>
             </span>
         </header>

@@ -23,7 +23,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
-        "portal.trusted-networks=203.0.113.9/32,198.51.100.7/32",
         "portal.networks.home=203.0.113.9/32",
         "portal.networks.beach=198.51.100.7/32",
         "portal.apps[0].label=Dashboard",
@@ -59,6 +58,18 @@ class PerNetworkTileTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("href=\"http://192.168.1.210:8088\"")))
                 .andExpect(content().string(not(containsString("192.168.1.23"))))
+                .andExpect(content().string(not(containsString("app-off"))));
+    }
+
+    /**
+     * Configuring only the named groups - no combined trusted list - must still light
+     * the tile. Seen in the wild: the old list was replaced rather than added to, and
+     * the tile went grey in both houses.
+     */
+    @Test
+    void namedGroupsAloneAreEnoughToLightTheTile() throws Exception {
+        mvc.perform(get("/").with(user("Jen").roles("USER")).with(from("198.51.100.7")))
+                .andExpect(status().isOk())
                 .andExpect(content().string(not(containsString("app-off"))));
     }
 
