@@ -33,6 +33,14 @@ portal:
       icon: bi-egg-fried
       color: orange
 
+    # A geography game built into this app (docs/globle.md). The tile is the only
+    # part of it the launcher knows about: remove this entry along with the game,
+    # or when switching it off with globle.enabled=false.
+    - label: Globle
+      url: /globle
+      icon: bi-globe-americas
+      color: blue
+
     # One tile, one dashboard box in each house. Neither is published.
     #
     # urls picks by network: the keys are groups named in portal.networks, matched

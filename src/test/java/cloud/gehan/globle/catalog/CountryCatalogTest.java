@@ -1,0 +1,207 @@
+package cloud.gehan.globle.catalog;
+
+import cloud.gehan.globle.model.Kind;
+import cloud.gehan.globle.model.Region;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.ClassPathResource;
+
+import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
+
+/** The shipped data, as the server loads it, plus the checks that make it refuse bad data. */
+class CountryCatalogTest {
+
+    private static CountryCatalog catalog;
+
+    @BeforeAll
+    static void load() {
+        catalog = new CountryCatalog();
+    }
+
+    @Test
+    void loadsEveryPlaceAndEveryAnswer() {
+        assertThat(catalog.all()).hasSize(248);
+        assertThat(catalog.answerable(Region.WORLD, Kind.COUNTRY)).hasSize(197);
+
+        Set<String> codes = new HashSet<>();
+        catalog.all().forEach(c -> assertThat(codes.add(c.code())).as("duplicate %s", c.code()).isTrue());
+    }
+
+    /**
+     * The file is sorted with accent-insensitive collation, which is what the
+     * autocomplete expects; the catalogue keeps that order rather than re-sorting.
+     */
+    @Test
+    void keepsTheFilesNameOrder() {
+        assertThat(catalog.all().get(0).name()).isEqualTo("Afghanistan");
+        assertThat(catalog.all().get(1).name()).isEqualTo("Åland Islands");
+    }
+
+    @Test
+    void neighboursAndTheSameCountryAreZeroKilometresApart() {
+        assertThat(catalog.km("FRA", "ESP")).isZero();
+        assertThat(catalog.km("USA", "CAN")).isZero();
+        assertThat(catalog.km("ITA", "VAT")).isZero();
+        assertThat(catalog.km("FRA", "FRA")).isZero();
+    }
+
+    @Test
+    void distancesAreBorderToBorderAndSymmetric() {
+        assertThat(catalog.km("GBR", "FRA")).isBetween(25, 45);
+        assertThat(catalog.km("FRA", "BRA")).isEqualTo(catalog.km("BRA", "FRA")).isGreaterThan(5000);
+        assertThat(catalog.km("JPN", "KOR")).isBetween(40, 70);
+    }
+
+    @Test
+    void capitalDistancesAreCityToCity() {
+        // Paris to Madrid is about 1,053 km as the crow flies.
+        assertThat(catalog.capitalKm("FRA", "ESP")).isBetween(1040, 1065);
+        assertThat(catalog.capitalKm("ESP", "FRA")).isEqualTo(catalog.capitalKm("FRA", "ESP"));
+        assertThat(catalog.capitalKm("FRA", "FRA")).isZero();
+        // Neighbours are not zero here: the capitals are still apart.
+        assertThat(catalog.capitalKm("USA", "CAN")).isBetween(700, 760);
+    }
+
+    @Test
+    void placesWithoutACapitalCannotBeMeasuredByOne() {
+        assertThat(catalog.require("ATA").hasCapital()).isFalse();
+        assertThatThrownBy(() -> catalog.capitalKm("ATA", "FRA")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void answerPoolsRespectRegionAndKind() {
+        for (Region region : Region.values()) {
+            for (Kind kind : Kind.values()) {
+                List<Country> pool = catalog.answerable(region, kind);
+                assertThat(pool).isNotEmpty();
+                assertThat(pool).allMatch(Country::answer);
+                assertThat(pool).allMatch(c -> region.includes(c.region()));
+                if (kind == Kind.CAPITAL) {
+                    assertThat(pool).allMatch(Country::hasCapital);
+                }
+            }
+        }
+        assertThat(catalog.answerable(Region.EUROPE, Kind.COUNTRY)).extracting(Country::code)
+                .contains("FRA").doesNotContain("JPN", "GRL");
+    }
+
+    @Test
+    void everyAnswerHasACapital() {
+        assertThat(catalog.answerable(Region.WORLD, Kind.CAPITAL))
+                .hasSameSizeAs(catalog.answerable(Region.WORLD, Kind.COUNTRY));
+    }
+
+    @Test
+    void lookupsAreExact() {
+        assertThat(catalog.find("FRA")).map(Country::name).contains("France");
+        assertThat(catalog.find("fra")).isEmpty();
+        assertThat(catalog.find("XXX")).isEmpty();
+        assertThat(catalog.find(null)).isEmpty();
+    }
+
+    @Test
+    void greatCircleDistances() {
+        assertThat(GreatCircle.km(0, 0, 0, 0)).isZero();
+        // Half the circumference, and no NaN at the antipode.
+        assertThat(GreatCircle.km(0, 0, 0, 180)).isCloseTo(Math.PI * GreatCircle.EARTH_RADIUS_KM, within(0.5));
+        assertThat(GreatCircle.km(90, 0, -90, 0)).isCloseTo(Math.PI * GreatCircle.EARTH_RADIUS_KM, within(0.5));
+    }
+
+    // ------------------------------------------------------------------ refusing bad data
+
+    @Test
+    void refusesADistanceFileForADifferentSetOfCountries() {
+        String distances = "{\"codes\":[\"AAA\",\"ZZZ\"],\"km\":[[0,1],[1,0]]}";
+        assertThatThrownBy(() -> load(countries("AAA", "BBB"), distances))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Globle data is inconsistent")
+                .hasMessageContaining("ZZZ")
+                .hasMessageContaining("globle.enabled=false");
+    }
+
+    @Test
+    void refusesAnAsymmetricMatrix() {
+        String distances = "{\"codes\":[\"AAA\",\"BBB\"],\"km\":[[0,1],[2,0]]}";
+        assertThatThrownBy(() -> load(countries("AAA", "BBB"), distances))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("not symmetric");
+    }
+
+    @Test
+    void refusesAMatrixOfTheWrongShape() {
+        String distances = "{\"codes\":[\"AAA\",\"BBB\"],\"km\":[[0,1]]}";
+        assertThatThrownBy(() -> load(countries("AAA", "BBB"), distances))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("rows");
+    }
+
+    @Test
+    void refusesADuplicatedCode() {
+        String distances = "{\"codes\":[\"AAA\",\"AAA\"],\"km\":[[0,0],[0,0]]}";
+        assertThatThrownBy(() -> load(countries("AAA", "AAA"), distances))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("twice");
+    }
+
+    @Test
+    void refusesARegionWithNothingToGuess() {
+        // Five answers, but the African one moved to Asia: an Africa game could never start.
+        String countries = countries("AAA", "BBB", "CCC", "DDD", "EEE")
+                .replace("\"region\":\"africa\",\"lat\":1", "\"region\":\"asia\",\"lat\":1");
+        String distances = "{\"codes\":[\"AAA\",\"BBB\",\"CCC\",\"DDD\",\"EEE\"],\"km\":"
+                + "[[0,1,1,1,1],[1,0,1,1,1],[1,1,0,1,1],[1,1,1,0,1],[1,1,1,1,0]]}";
+        assertThatThrownBy(() -> load(countries, distances))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("no possible");
+    }
+
+    @Test
+    void acceptsSmallButConsistentData() {
+        String distances = "{\"codes\":[\"EEE\",\"DDD\",\"CCC\",\"BBB\",\"AAA\"],\"km\":"
+                + "[[0,4,3,2,1],[4,0,7,6,5],[3,7,0,9,8],[2,6,9,0,10],[1,5,8,10,0]]}";
+        CountryCatalog small = load(countries("AAA", "BBB", "CCC", "DDD", "EEE"), distances);
+        // Indexed by the distance file's own code list, not by position.
+        assertThat(small.km("AAA", "EEE")).isEqualTo(1);
+        assertThat(small.km("BBB", "DDD")).isEqualTo(6);
+        assertThat(small.km("DDD", "BBB")).isEqualTo(6);
+    }
+
+    @Test
+    void theShippedFilesAreWhatTheDefaultConstructorReads() {
+        assertThat(new ClassPathResource(CountryCatalog.COUNTRIES).exists()).isTrue();
+        assertThat(new ClassPathResource(CountryCatalog.DISTANCES).exists()).isTrue();
+    }
+
+    /** One answer country per region, in order: africa, americas, asia, europe, oceania. */
+    private static String countries(String... codes) {
+        String[] regions = {"africa", "americas", "asia", "europe", "oceania"};
+        StringBuilder out = new StringBuilder("[");
+        for (int i = 0; i < codes.length; i++) {
+            if (i > 0) {
+                out.append(',');
+            }
+            out.append("{\"code\":\"").append(codes[i]).append("\",\"name\":\"Place ").append(i)
+                    .append("\",\"iso2\":null,\"aliases\":[],\"answer\":true,\"region\":\"")
+                    .append(regions[i % regions.length]).append("\",\"lat\":").append(i + 1)
+                    .append(",\"lng\":").append(i + 1)
+                    .append(",\"capital\":{\"name\":\"City ").append(i)
+                    .append("\",\"aliases\":[],\"lat\":").append(i + 1).append(",\"lng\":").append(i + 1)
+                    .append("}}");
+        }
+        return out.append(']').toString();
+    }
+
+    private static CountryCatalog load(String countries, String distances) {
+        return new CountryCatalog(
+                new ByteArrayResource(countries.getBytes(StandardCharsets.UTF_8)),
+                new ByteArrayResource(distances.getBytes(StandardCharsets.UTF_8)));
+    }
+}

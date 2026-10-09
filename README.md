@@ -19,7 +19,9 @@ knows, and enough awareness of *where you are standing* to know which tiles can
 actually be reached from there.
 
 Spring Boot serves the launcher, the login, and an admin-only user console. That
-is the whole app — no API, no SPA, no database server. It ships as a container:
+is the whole app — no SPA, no database server — apart from
+[Globle](docs/globle.md), an optional geography game that brings a small JSON API
+of its own and can be deleted in one go. It ships as a container:
 every push to `main` builds an image, publishes it to GHCR, and Watchtower on the
 server pulls and restarts.
 
@@ -108,6 +110,36 @@ be easy to lose in a refactor.
 
 Full detail in [Networks and tiles](docs/networking.md#two-houses-one-tile).
 
+## Globle
+
+A family geography game at `/globle`, after
+[globle-game.com](https://globle-game.com): one mystery country a day, the same for
+everyone, found by guessing countries and watching them light up hotter or colder on
+a globe. Unlimited and capital-city modes sit beside it for practice. Full detail in
+[Globle](docs/globle.md).
+
+**The daily answer cannot be known ahead of time.** The obvious design picks
+the day's country with a seeded shuffle of the date, and in a public repo that is a
+spoiler anyone can run. Instead the server draws it with `SecureRandom` the first time
+a day is needed, stores it, and only ever reveals it in a response for a game that is
+already over. A test asserts the answer's code appears nowhere in any in-progress
+response. That stops a spoiler before play, not after: distances are exact and the
+full matrix is in the repo, so one guess plus a lookup pins the country down. The
+leaderboards are on the honour system.
+
+**Distances are precomputed, not approximated.** "How far is my guess" means the
+shortest gap between the two *borders*, so neighbours are 0 km. Centroids would get
+that badly wrong (Russia's middle is nowhere near Finland), so `tools/globle` measures
+every pair of Natural Earth shapes once, on a sphere, and the server ships the
+248 × 248 matrix as a JSON file.
+
+**It is one package you can delete.** Everything lives under `cloud.gehan.globle` and
+`globle/` resource folders; no existing class was edited, every bean is gated on
+`globle.enabled`, and its API gets its own security chain rather than a change to
+`SecurityConfig`. A test boots the app with the game switched off and checks the
+launcher behaves exactly as before; the removal checklist is in
+[docs/globle.md](docs/globle.md#removing-globle).
+
 ## Architecture
 
 ```
@@ -134,6 +166,7 @@ Full detail in [Networks and tiles](docs/networking.md#two-houses-one-tile).
       |  /        launcher, from apps.yml  |
       |  /login   form login               |
       |  /users   admin console            |
+      |  /globle  the game (optional)      |
       +------------------+-----------------+
                          v
                   users.db (SQLite)
@@ -150,7 +183,7 @@ needs no public address of its own either.
 | --- | --- |
 | Language / runtime | Java 21 |
 | Framework | Spring Boot 3.5 (Web, Security, Data JPA, Thymeleaf) |
-| Storage | SQLite, one table of users |
+| Storage | SQLite, one table of users (plus Globle's two `globle_` tables) |
 | Auth | Session form login, BCrypt hashing |
 | Container | Multi-stage Docker build, layered Spring Boot jar, multi-arch |
 | Ingress | Cloudflare Tunnel — nothing listens on the server's public interface |
@@ -167,8 +200,12 @@ needs no public address of its own either.
 | `POST` | `/logout` | authenticated | Sign out |
 | `GET` | `/users` | `ADMIN` | User management console |
 | `POST` | `/users`, `/users/{id}/delete`, `/{id}/reset`, `/{id}/role` | `ADMIN` | Create, delete, reset password, change role |
+| `GET` | `/globle` | authenticated | Globle, the optional game |
+| `GET` | `/globle/api/countries`, `/daily`, `/unlimited/current?kind=`, `/leaderboard` | authenticated | Globle's JSON API: places, today's game, a practice game in progress, standings |
+| `POST` | `/globle/api/daily/guess`, `/daily/give-up`, `/unlimited/new`, `/unlimited/{id}/guess`, `/unlimited/{id}/give-up` | authenticated | Globle's JSON API: play. CSRF token as a header; 401 JSON when signed out |
 
-That is every route. There is no API surface.
+That is every route. The only API surface is Globle's, which exists only while the
+game is installed and answers only to a signed-in session.
 
 The two `__` probes exist so other services can sit behind this same login without
 each growing its own: a reverse proxy asks `/__auth` whether the visitor is signed
@@ -177,13 +214,14 @@ on the reply. See [Networks and tiles](docs/networking.md).
 
 ## Security
 
-Every route is a page behind a session; there is no API surface and no token to
-leak. What that leaves:
+Every route is a page behind a session. Globle's JSON API is the one exception, and
+it rides the same session cookie and CSRF token as the forms, so there is still no
+bearer token or API key to leak. What that leaves:
 
 | | |
 | --- | --- |
 | Passwords | BCrypt. Never stored or logged in the clear. |
-| CSRF | On. Every state-changing route is a form and carries a token. |
+| CSRF | On. Every state-changing route is a form and carries a token; Globle's JSON POSTs send the same token as a header. |
 | Session cookie | `Secure`, `HttpOnly`, `SameSite=Lax`, rotated on login. |
 | Headers | CSP with `script-src 'self'`, plus HSTS, `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`. |
 | Redirects | The `continue` parameter is validated against `BASE_DOMAIN`; off-domain targets are dropped. |
@@ -220,6 +258,7 @@ configured on the Cloudflare side rather than here.
 src/main/java/cloud/gehan/
 ├── config/       SecurityConfig, AdminBootstrap, PortalProperties
 ├── controller/   Home (launcher), Login, UserAdmin, AuthProbe
+├── globle/       the Globle game, entirely: delete it to remove the game
 ├── model/        User entity
 ├── repository/   Spring Data JPA
 ├── security/     FirstLoginAuthenticationProvider, RedirectTargets,
@@ -232,6 +271,7 @@ src/main/resources/
 └── templates/    index, login, users
 
 docs/                the operator's half: running, networking, deploying
+tools/globle/        regenerates Globle's country, distance and map data
 docker-compose.yml   the deployment: portal, optional Watchtower, optional tunnel
 .env.example         every setting the server needs, with the reasoning
 deploy/casaos/       the same deployment as an importable CasaOS app
@@ -244,6 +284,7 @@ deploy/casaos/       the same deployment as an importable CasaOS app
 | [Running it](docs/running.md) | Build, test, configure, add a tile, manage accounts |
 | [Networks and tiles](docs/networking.md) | Forward-auth, `lanOnly`, the two houses, which address the app believes |
 | [Deploying](docs/deploying.md) | The image, the server, CasaOS, the Cloudflare side, CI |
+| [Globle](docs/globle.md) | The game: modes, how it works, its data, removing it |
 
 ## License
 

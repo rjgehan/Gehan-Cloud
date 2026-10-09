@@ -1,0 +1,191 @@
+package cloud.gehan.globle;
+
+import cloud.gehan.globle.catalog.Country;
+import cloud.gehan.globle.catalog.CountryCatalog;
+import cloud.gehan.globle.repository.GlobleDayRepository;
+import cloud.gehan.globle.repository.GlobleGameRepository;
+import cloud.gehan.globle.service.DailyPuzzles;
+import cloud.gehan.repository.UserRepository;
+import cloud.gehan.service.UserService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Shared setup for Globle's integration tests. Every subclass gets the same Spring
+ * context (same configuration, so the test framework caches one), with time on a
+ * {@link MovableClock} and empty Globle tables and users before each test.
+ *
+ * <p>The game is pinned on, as GlobleDisabledTest pins it off, so that an exported
+ * {@code GLOBLE_ENABLED=false} cannot switch it off underneath these tests.
+ */
+@SpringBootTest(properties = "globle.enabled=true")
+@AutoConfigureMockMvc
+@Import(GlobleTestBase.TestClock.class)
+public abstract class GlobleTestBase {
+
+    /** Puzzle #1. */
+    protected static final LocalDate DAY_ONE = LocalDate.of(2026, 10, 9);
+
+    @TestConfiguration
+    static class TestClock {
+        @Bean
+        MovableClock globleTimeSource() {
+            return new MovableClock();
+        }
+    }
+
+    @Autowired
+    protected MockMvc mvc;
+
+    @Autowired
+    protected ObjectMapper json;
+
+    @Autowired
+    protected MovableClock clock;
+
+    @Autowired
+    protected UserService userService;
+
+    @Autowired
+    protected UserRepository users;
+
+    @Autowired
+    protected GlobleGameRepository games;
+
+    @Autowired
+    protected GlobleDayRepository days;
+
+    @Autowired
+    protected DailyPuzzles puzzles;
+
+    @Autowired
+    protected CountryCatalog catalog;
+
+    @BeforeEach
+    void resetGloble() {
+        games.deleteAll();
+        days.deleteAll();
+        users.deleteAll();
+        clock.setDay(DAY_ONE);
+    }
+
+    /** Creates an account and returns a signed-in session for it. */
+    protected RequestPostProcessor player(String username) {
+        userService.create(username, UserService.ROLE_USER);
+        return user(username).roles(UserService.ROLE_USER);
+    }
+
+    protected LocalDate day(int puzzleNumber) {
+        return DAY_ONE.plusDays(puzzleNumber - 1L);
+    }
+
+    // ------------------------------------------------------------------ requests
+
+    protected JsonNode getOk(String url, RequestPostProcessor who) throws Exception {
+        return read(mvc.perform(get(url).with(who)).andExpect(status().isOk()).andReturn());
+    }
+
+    protected ResultActions post(String url, Object body, RequestPostProcessor who) throws Exception {
+        var request = MockMvcRequestBuilders.post(url)
+                .with(who).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON);
+        if (body != null) {
+            request = request.content(json.writeValueAsString(body));
+        }
+        return mvc.perform(request);
+    }
+
+    protected JsonNode postOk(String url, Object body, RequestPostProcessor who) throws Exception {
+        return read(post(url, body, who).andExpect(status().isOk()).andReturn());
+    }
+
+    protected JsonNode read(MvcResult result) throws Exception {
+        return json.readTree(result.getResponse().getContentAsString());
+    }
+
+    protected JsonNode guessDaily(RequestPostProcessor who, String code) throws Exception {
+        return postOk("/globle/api/daily/guess", Map.of("code", code), who);
+    }
+
+    protected JsonNode giveUpDaily(RequestPostProcessor who) throws Exception {
+        return postOk("/globle/api/daily/give-up", null, who);
+    }
+
+    protected JsonNode newGame(RequestPostProcessor who, String kind, String region) throws Exception {
+        return postOk("/globle/api/unlimited/new", Map.of("kind", kind, "region", region), who);
+    }
+
+    protected JsonNode guessUnlimited(RequestPostProcessor who, long id, String code) throws Exception {
+        return postOk("/globle/api/unlimited/" + id + "/guess", Map.of("code", code), who);
+    }
+
+    protected JsonNode board(RequestPostProcessor who) throws Exception {
+        return getOk("/globle/api/leaderboard", who);
+    }
+
+    // ------------------------------------------------------------------ answers
+
+    protected String answerToday() {
+        return puzzles.answerFor(clock.instant().atZone(MovableClock.PUZZLE_ZONE).toLocalDate());
+    }
+
+    /** The stored answer of an unlimited game, which the API never shows mid-game. */
+    protected String answerOf(long gameId) {
+        return games.findById(gameId).orElseThrow().getAnswerCode();
+    }
+
+    /** {@code n} distinct places that are not {@code answer}, in catalogue order. */
+    protected List<String> wrongGuesses(String answer, int n) {
+        List<String> codes = new ArrayList<>();
+        for (Country country : catalog.all()) {
+            if (codes.size() == n) {
+                break;
+            }
+            if (!country.code().equals(answer)) {
+                codes.add(country.code());
+            }
+        }
+        return codes;
+    }
+
+    /** A place that is not the answer and does not border it, so its distance is real. */
+    protected String farFrom(String answer) {
+        return catalog.all().stream()
+                .map(Country::code)
+                .filter(code -> !code.equals(answer) && catalog.km(code, answer) > 0)
+                .findFirst()
+                .orElseThrow();
+    }
+
+    /** Wins today's daily in exactly {@code guesses} guesses. */
+    protected JsonNode winDailyIn(RequestPostProcessor who, int guesses) throws Exception {
+        String answer = answerToday();
+        for (String wrong : wrongGuesses(answer, guesses - 1)) {
+            guessDaily(who, wrong);
+        }
+        return guessDaily(who, answer);
+    }
+}

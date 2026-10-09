@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#06111a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- Spring Security's CSRF token. api.js sends it as a header on every POST. -->
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <title>Globle | Gehan.Cloud</title>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/globle/css/globle.css">
+</head>
+
+<!-- Everything Globle needs lives under /globle: this template, static/globle and
+     the cloud.gehan.globle package. Nothing here depends on the launcher's files. -->
+<body th:data-puzzle="${puzzleNumber}" th:data-date="${puzzleDate}" th:data-username="${username}" data-mode="daily">
+
+    <div class="gl-sky" aria-hidden="true"></div>
+
+    <div class="gl-session" id="session-banner" role="alert" hidden>
+        <i class="bi bi-person-lock" aria-hidden="true"></i>
+        <span id="session-text">Your session has expired, so guesses can't be saved.</span>
+        <a class="gl-btn gl-btn-primary gl-btn-sm" id="session-link" href="/login?continue=/globle">Sign in again</a>
+    </div>
+
+    <div class="gl-app">
+
+        <header class="gl-top">
+            <a class="gl-chip gl-chip-icon" href="/" title="Back to Gehan.Cloud">
+                <i class="bi bi-arrow-left" aria-hidden="true"></i>
+                <span class="sr-only">Back to Gehan.Cloud</span>
+            </a>
+            <h1 class="gl-title">
+                <span class="gl-logo" aria-hidden="true"><i class="bi bi-globe-americas"></i></span>
+                <span>Globle</span>
+                <span class="gl-title-tag" id="title-tag" th:text="${puzzleNumber != null} ? '#' + ${puzzleNumber} : ''">#1</span>
+            </h1>
+            <div class="gl-top-actions">
+                <button type="button" class="gl-chip gl-chip-icon" id="btn-help" title="How to play">
+                    <i class="bi bi-question-lg" aria-hidden="true"></i>
+                    <span class="sr-only">How to play</span>
+                </button>
+                <button type="button" class="gl-chip gl-chip-icon" id="btn-stats" title="Your stats">
+                    <i class="bi bi-bar-chart-fill" aria-hidden="true"></i>
+                    <span class="sr-only">Your stats</span>
+                </button>
+                <button type="button" class="gl-chip gl-chip-icon" id="btn-board" title="Leaderboard">
+                    <i class="bi bi-trophy-fill" aria-hidden="true"></i>
+                    <span class="sr-only">Leaderboard</span>
+                </button>
+            </div>
+        </header>
+
+        <nav class="gl-modes" aria-label="Game mode">
+            <div class="gl-seg" role="group" aria-label="Mode">
+                <button type="button" class="gl-seg-btn" data-mode="daily" aria-pressed="true">
+                    <i class="bi bi-calendar2-check" aria-hidden="true"></i><span>Daily</span>
+                </button>
+                <button type="button" class="gl-seg-btn" data-mode="unlimited" aria-pressed="false">
+                    <i class="bi bi-infinity" aria-hidden="true"></i><span>Unlimited</span>
+                </button>
+                <button type="button" class="gl-seg-btn" data-mode="capitals" aria-pressed="false">
+                    <i class="bi bi-bank2" aria-hidden="true"></i><span>Capitals</span>
+                </button>
+            </div>
+            <label class="gl-region" id="region-wrap" hidden>
+                <i class="bi bi-geo-alt-fill" aria-hidden="true"></i>
+                <span class="sr-only">Region</span>
+                <select id="region"></select>
+            </label>
+            <button type="button" class="gl-chip gl-chip-icon gl-blind-btn" id="btn-blind" aria-pressed="false"
+                    title="Blind mode: hide the map, show only your guesses">
+                <i class="bi bi-eye-slash-fill" aria-hidden="true"></i>
+                <span class="sr-only">Blind mode</span>
+            </button>
+        </nav>
+
+        <section class="gl-stage" id="stage" aria-label="Globe">
+            <canvas id="globe" tabindex="0" role="application" aria-roledescription="globe"
+                    aria-label="Globe of your guesses. Drag to spin, scroll or pinch to zoom. With the globe focused, arrow keys rotate, plus and minus zoom, and 0 resets."></canvas>
+            <p class="gl-stage-badge" id="stage-badge"><i class="bi bi-calendar2-check" aria-hidden="true"></i> Daily</p>
+            <p class="gl-stage-blind" id="stage-blind" hidden><i class="bi bi-eye-slash-fill" aria-hidden="true"></i> Blind</p>
+            <div class="gl-stage-tools">
+                <button type="button" class="gl-round" id="zoom-in" title="Zoom in">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i><span class="sr-only">Zoom in</span>
+                </button>
+                <button type="button" class="gl-round" id="zoom-out" title="Zoom out">
+                    <i class="bi bi-dash-lg" aria-hidden="true"></i><span class="sr-only">Zoom out</span>
+                </button>
+                <button type="button" class="gl-round" id="zoom-reset" title="Reset view">
+                    <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i><span class="sr-only">Reset view</span>
+                </button>
+            </div>
+            <p class="gl-stage-hint" id="stage-hint" aria-hidden="true">Drag to spin &middot; pinch or scroll to zoom</p>
+            <div class="gl-tip" id="tip" aria-hidden="true" hidden></div>
+            <p class="gl-stage-status" id="stage-status" role="status" hidden></p>
+        </section>
+
+        <section class="gl-panel" id="panel" aria-label="Your game">
+
+            <p class="gl-practice" id="practice-note" hidden>
+                <i class="bi bi-controller" aria-hidden="true"></i>
+                Practice round &mdash; doesn't count toward your daily streak.
+            </p>
+
+            <p class="gl-panel-status" id="panel-status" role="status" hidden></p>
+
+            <div class="gl-card gl-start" id="start-card" hidden>
+                <h2 id="start-title">Unlimited</h2>
+                <p id="start-copy"></p>
+                <button type="button" class="gl-btn gl-btn-primary gl-btn-lg" id="btn-start">
+                    <i class="bi bi-play-fill" aria-hidden="true"></i>
+                    <span id="btn-start-label">Start a game</span>
+                </button>
+            </div>
+
+            <div class="gl-card gl-end" id="end-card" hidden>
+                <p class="gl-end-kicker" id="end-kicker"></p>
+                <div class="gl-end-answer">
+                    <span class="gl-end-flag" id="end-flag" aria-hidden="true"></span>
+                    <div>
+                        <h2 class="gl-end-name" id="end-name"></h2>
+                        <p class="gl-end-sub" id="end-sub"></p>
+                    </div>
+                </div>
+                <p class="gl-end-count" id="end-count"></p>
+
+                <div id="end-daily">
+                    <div class="gl-tiles" id="end-tiles"></div>
+                    <h3 class="gl-section">Guess distribution</h3>
+                    <div id="end-dist"></div>
+                    <p class="gl-next" id="end-next">
+                        <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+                        Next Globle in <span class="gl-countdown" id="countdown">--:--:--</span>
+                    </p>
+                    <button type="button" class="gl-btn gl-btn-primary" id="btn-next-daily" hidden>
+                        <i class="bi bi-stars" aria-hidden="true"></i> A new puzzle is ready
+                    </button>
+                </div>
+
+                <p class="gl-end-record" id="end-unlimited"><span id="end-record"></span></p>
+
+                <div class="gl-end-actions">
+                    <button type="button" class="gl-btn gl-btn-primary" id="btn-share">
+                        <i class="bi bi-share-fill" aria-hidden="true"></i> <span id="btn-share-label">Share</span>
+                    </button>
+                    <button type="button" class="gl-btn gl-btn-primary" id="btn-new-after" hidden>
+                        <i class="bi bi-arrow-repeat" aria-hidden="true"></i> <span id="btn-new-after-label">New game</span>
+                    </button>
+                    <button type="button" class="gl-btn" id="btn-try-unlimited" hidden>
+                        <i class="bi bi-infinity" aria-hidden="true"></i> Keep playing: Unlimited
+                    </button>
+                    <button type="button" class="gl-btn gl-btn-ghost" id="btn-board-end">
+                        <i class="bi bi-trophy" aria-hidden="true"></i> Leaderboard
+                    </button>
+                </div>
+                <label class="sr-only" for="share-fallback">Result to copy</label>
+                <textarea class="gl-share-fallback" id="share-fallback" rows="5" readonly hidden></textarea>
+            </div>
+
+            <form class="gl-guess" id="guess-form" autocomplete="off" novalidate hidden>
+                <label class="sr-only" for="guess-input" id="guess-label">Guess a country</label>
+                <div class="gl-combo">
+                    <i class="bi bi-search gl-combo-icon" aria-hidden="true"></i>
+                    <input id="guess-input" type="text" autocomplete="off" autocapitalize="words" autocorrect="off"
+                           spellcheck="false" enterkeyhint="go" placeholder="Guess a country&hellip;"
+                           aria-describedby="guess-error guess-help">
+                    <button type="submit" class="gl-combo-go" id="guess-go" title="Guess">
+                        <i class="bi bi-arrow-right" aria-hidden="true"></i><span class="sr-only">Guess</span>
+                    </button>
+                    <ul class="gl-options" id="guess-options" hidden></ul>
+                </div>
+                <p class="sr-only" id="guess-help">Type to see matching places, use the arrow keys to choose, and Enter to guess.</p>
+                <p class="gl-error" id="guess-error" aria-live="assertive"></p>
+            </form>
+
+            <p class="gl-closest" id="closest" hidden></p>
+
+            <div class="gl-guess-section" id="guess-section" hidden>
+                <div class="gl-list-head">
+                    <h2 class="gl-section">Guesses <span class="gl-count" id="guess-count">0</span></h2>
+                    <div class="gl-units" role="group" aria-label="Distance units">
+                        <button type="button" data-units="km" aria-pressed="true">km</button>
+                        <button type="button" data-units="mi" aria-pressed="false">mi</button>
+                    </div>
+                </div>
+                <ol class="gl-guesses" id="guesses" aria-label="Your guesses, closest first"></ol>
+                <p class="gl-empty" id="guesses-empty">No guesses yet. Any country is a fine place to start.</p>
+            </div>
+
+            <div class="gl-actions" id="play-actions" hidden>
+                <button type="button" class="gl-btn gl-btn-ghost" id="btn-skip" hidden>
+                    <i class="bi bi-skip-forward-fill" aria-hidden="true"></i> New game
+                </button>
+                <button type="button" class="gl-btn gl-btn-ghost gl-btn-quiet-danger" id="btn-giveup">
+                    <i class="bi bi-flag-fill" aria-hidden="true"></i> Give up
+                </button>
+            </div>
+
+            <p class="gl-credit">
+                Inspired by <a href="https://globle-game.com" target="_blank" rel="noopener noreferrer">globle-game.com</a>
+            </p>
+        </section>
+    </div>
+
+    <!-- How to play -->
+    <dialog class="gl-sheet" id="dlg-help" aria-labelledby="help-title">
+        <div class="gl-sheet-body">
+            <header class="gl-sheet-head">
+                <h2 id="help-title">How to play</h2>
+                <button type="button" class="gl-chip gl-chip-icon" data-close title="Close" autofocus>
+                    <i class="bi bi-x-lg" aria-hidden="true"></i><span class="sr-only">Close</span>
+                </button>
+            </header>
+            <p class="gl-lede">Find the mystery country. Every guess lights up on the globe, coloured by how close
+                it is: the hotter the colour, the closer you are. Guesses are unlimited.</p>
+
+            <div class="gl-legend">
+                <div class="gl-legend-row">
+                    <span class="gl-legend-bar" aria-hidden="true"></span>
+                    <span class="gl-legend-found" aria-hidden="true"></span>
+                </div>
+                <div class="gl-legend-labels">
+                    <span>Far away</span><span>Very close</span><span>Found</span>
+                </div>
+            </div>
+
+            <ul class="gl-rules">
+                <li>
+                    <span class="gl-rule-icon is-daily" aria-hidden="true"><i class="bi bi-calendar2-check"></i></span>
+                    <div><strong>Daily.</strong> One mystery country a day, the same for the whole family. It counts toward
+                        your streak and the leaderboard, and a new one arrives at midnight.</div>
+                </li>
+                <li>
+                    <span class="gl-rule-icon is-unlimited" aria-hidden="true"><i class="bi bi-infinity"></i></span>
+                    <div><strong>Unlimited.</strong> A new random country whenever you want, optionally inside one region.
+                        It has its own leaderboard and never touches your daily streak.</div>
+                </li>
+                <li>
+                    <span class="gl-rule-icon is-capitals" aria-hidden="true"><i class="bi bi-bank2"></i></span>
+                    <div><strong>Capitals.</strong> The mystery is a capital city. Guess capitals (&ldquo;Paris &mdash; France&rdquo;);
+                        the distance is measured city to city and each guess is a dot on the globe.</div>
+                </li>
+                <li>
+                    <span class="gl-rule-icon is-blind" aria-hidden="true"><i class="bi bi-eye-slash-fill"></i></span>
+                    <div><strong>Blind.</strong> Hides the map: only the sea and the places you have guessed are drawn.
+                        Switch it on or off with the eye button at any time.</div>
+                </li>
+            </ul>
+
+            <h3 class="gl-section">Distances</h3>
+            <p>For countries, distance is the shortest gap between the two borders, so a neighbour is
+                <strong>0 km</strong> away and painted deep red without being the answer. Tiny countries get a dot so
+                you can find them.</p>
+            <p>Territories such as Greenland or Puerto Rico can be guessed for their distance, but are never the
+                answer. The list marks them.</p>
+
+            <h3 class="gl-section">Sharing</h3>
+            <p>Your result shares as squares, never names: &#x1F7E9; found &middot; &#x1F7E5; under 1,500 km &middot;
+                &#x1F7E7; under 3,750 km &middot; &#x1F7E8; under 7,500 km &middot; &#x2B1C; farther.</p>
+
+            <h3 class="gl-section">The globe</h3>
+            <p>Drag to spin, pinch or scroll to zoom, and tap a guessed country to see its name. With the globe
+                focused, the arrow keys turn it and <kbd>+</kbd>/<kbd>&minus;</kbd> zoom. Press <kbd>/</kbd> to jump to
+                the guess box.</p>
+
+            <p class="gl-muted gl-small">Inspired by <a href="https://globle-game.com" target="_blank" rel="noopener noreferrer">globle-game.com</a>.
+                Borders from Natural Earth.</p>
+        </div>
+    </dialog>
+
+    <!-- Your stats -->
+    <dialog class="gl-sheet" id="dlg-stats" aria-labelledby="stats-title">
+        <div class="gl-sheet-body">
+            <header class="gl-sheet-head">
+                <h2 id="stats-title">Your stats</h2>
+                <button type="button" class="gl-chip gl-chip-icon" data-close title="Close" autofocus>
+                    <i class="bi bi-x-lg" aria-hidden="true"></i><span class="sr-only">Close</span>
+                </button>
+            </header>
+            <h3 class="gl-section">Daily</h3>
+            <div class="gl-tiles" id="stats-tiles"></div>
+            <h3 class="gl-section">Guess distribution</h3>
+            <div id="stats-dist"></div>
+            <h3 class="gl-section">Practice</h3>
+            <dl class="gl-record">
+                <div><dt><i class="bi bi-infinity" aria-hidden="true"></i> Unlimited</dt><dd id="stats-unlimited"></dd></div>
+                <div><dt><i class="bi bi-bank2" aria-hidden="true"></i> Capitals</dt><dd id="stats-capitals"></dd></div>
+            </dl>
+        </div>
+    </dialog>
+
+    <!-- Leaderboard -->
+    <dialog class="gl-sheet gl-sheet-wide" id="dlg-board" aria-labelledby="board-title">
+        <div class="gl-sheet-body">
+            <header class="gl-sheet-head">
+                <h2 id="board-title">Leaderboard</h2>
+                <button type="button" class="gl-chip gl-chip-icon" data-close title="Close">
+                    <i class="bi bi-x-lg" aria-hidden="true"></i><span class="sr-only">Close</span>
+                </button>
+            </header>
+            <div class="gl-tabs" role="tablist" aria-label="Leaderboard period">
+                <button type="button" role="tab" id="tab-today" data-tab="today" aria-controls="board-panel" aria-selected="true">Today</button>
+                <button type="button" role="tab" id="tab-week" data-tab="week" aria-controls="board-panel" aria-selected="false" tabindex="-1">Week</button>
+                <button type="button" role="tab" id="tab-all" data-tab="all" aria-controls="board-panel" aria-selected="false" tabindex="-1">All time</button>
+                <button type="button" role="tab" id="tab-unlimited" data-tab="unlimited" aria-controls="board-panel" aria-selected="false" tabindex="-1">Unlimited</button>
+            </div>
+            <div class="gl-subtabs" id="board-sub" role="group" aria-label="Game type" hidden>
+                <button type="button" data-kind="country" aria-pressed="true"><i class="bi bi-globe2" aria-hidden="true"></i> Countries</button>
+                <button type="button" data-kind="capital" aria-pressed="false"><i class="bi bi-bank2" aria-hidden="true"></i> Capitals</button>
+            </div>
+            <div class="gl-board" id="board-panel" role="tabpanel" aria-labelledby="tab-today" tabindex="0"></div>
+        </div>
+    </dialog>
+
+    <!-- In-page confirmation (never window.confirm) -->
+    <dialog class="gl-sheet gl-sheet-small" id="dlg-confirm" aria-labelledby="confirm-title" aria-describedby="confirm-body">
+        <div class="gl-sheet-body">
+            <h2 id="confirm-title">Are you sure?</h2>
+            <p id="confirm-body"></p>
+            <div class="gl-confirm-actions">
+                <button type="button" class="gl-btn" id="confirm-cancel" data-close>Cancel</button>
+                <button type="button" class="gl-btn gl-btn-primary" id="confirm-ok">OK</button>
+            </div>
+        </div>
+    </dialog>
+
+    <div class="gl-toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <div class="sr-only" id="announcer" aria-live="polite" aria-atomic="true"></div>
+
+    <noscript>
+        <p class="gl-noscript">Globle needs JavaScript to draw the globe. <a href="/">Back to Gehan.Cloud</a></p>
+    </noscript>
+
+    <!-- UMD globals first (window.d3, window.topojson), then the game's modules. -->
+    <script src="/globle/vendor/d3.min.js"></script>
+    <script src="/globle/vendor/topojson-client.min.js"></script>
+    <script type="module" src="/globle/js/main.js"></script>
+</body>
+
+</html>
