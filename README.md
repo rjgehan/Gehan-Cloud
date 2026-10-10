@@ -115,8 +115,9 @@ Full detail in [Networks and tiles](docs/networking.md#two-houses-one-tile).
 A family geography game at `/globle`, after
 [globle-game.com](https://globle-game.com): one mystery country a day, the same for
 everyone, found by guessing countries and watching them light up hotter or colder on
-a globe. Unlimited and capital-city modes sit beside it for practice. Full detail in
-[Globle](docs/globle.md).
+a globe. A home screen offers a second, Hard daily (a blind globe, no suggestions,
+rarer countries) beside it, and practice rounds: unlimited, by region, mainland only,
+or capital cities. Full detail in [Globle](docs/globle.md).
 
 **The daily answer cannot be known ahead of time.** The obvious design picks
 the day's country with a seeded shuffle of the date, and in a public repo that is a
@@ -183,7 +184,7 @@ needs no public address of its own either.
 | --- | --- |
 | Language / runtime | Java 21 |
 | Framework | Spring Boot 3.5 (Web, Security, Data JPA, Thymeleaf) |
-| Storage | SQLite, one table of users (plus Globle's two `globle_` tables) |
+| Storage | SQLite, one table of users (plus Globle's three `globle_` tables) |
 | Auth | Session form login, BCrypt hashing |
 | Container | Multi-stage Docker build, layered Spring Boot jar, multi-arch |
 | Ingress | Cloudflare Tunnel — nothing listens on the server's public interface |
@@ -201,7 +202,7 @@ needs no public address of its own either.
 | `GET` | `/users` | `ADMIN` | User management console |
 | `POST` | `/users`, `/users/{id}/delete`, `/{id}/reset`, `/{id}/role` | `ADMIN` | Create, delete, reset password, change role |
 | `GET` | `/globle` | authenticated | Globle, the optional game |
-| `GET` | `/globle/api/countries`, `/daily`, `/unlimited/current?kind=`, `/leaderboard` | authenticated | Globle's JSON API: places, today's game, a practice game in progress, standings |
+| `GET` | `/globle/api/countries`, `/home`, `/daily`, `/unlimited/current?kind=`, `/leaderboard` | authenticated | Globle's JSON API: places, the home screen, today's games, a practice game in progress, standings |
 | `POST` | `/globle/api/daily/guess`, `/daily/give-up`, `/unlimited/new`, `/unlimited/{id}/guess`, `/unlimited/{id}/give-up` | authenticated | Globle's JSON API: play. CSRF token as a header; 401 JSON when signed out |
 
 That is every route. The only API surface is Globle's, which exists only while the

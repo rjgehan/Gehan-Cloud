@@ -202,11 +202,11 @@ export function dailyTiles(me) {
 }
 
 /** Guess distribution as horizontal bars; the bucket of today's win is lit. */
-export function renderDistribution(node, distribution, highlight) {
+export function renderDistribution(node, distribution, highlight, { empty: emptyText = "Win a daily puzzle to start your chart." } = {}) {
     const rows = distributionRows(distribution, highlight);
     const empty = rows.every((r) => r.count === 0);
     if (empty) {
-        node.replaceChildren(el("p", { class: "gl-muted", text: "Win a daily puzzle to start your chart." }));
+        node.replaceChildren(el("p", { class: "gl-muted", text: emptyText }));
         return;
     }
     node.replaceChildren(el("ol", { class: "gl-dist", "aria-label": "Daily wins by number of guesses" },
@@ -248,12 +248,13 @@ function emptyNote(text) {
     return el("p", { class: "gl-muted gl-board-empty", text });
 }
 
-export function renderToday(node, today) {
+/** name is what the puzzle is called in the heading: "Puzzle" (classic) or "Hard". */
+export function renderToday(node, today, { name = "Puzzle" } = {}) {
     if (!today) {
         node.replaceChildren(emptyNote("No puzzle today."));
         return;
     }
-    const parts = [el("p", { class: "gl-board-meta", text: `Puzzle #${today.puzzle} · ${formatPuzzleDate(today.date)}` })];
+    const parts = [el("p", { class: "gl-board-meta", text: `${name} #${today.puzzle} · ${formatPuzzleDate(today.date)}` })];
     // The race is visible while you play: entries carry only a status and a guess
     // count, never a country, so there is nothing here to spoil.
     if (!today.viewerFinished) {
@@ -277,14 +278,15 @@ export function renderToday(node, today) {
     node.replaceChildren(...parts);
 }
 
-export function renderWeek(node, week) {
+/** what names the dailies: "Daily puzzles" or "Hard dailies". */
+export function renderWeek(node, week, { what = "Daily puzzles" } = {}) {
     const rows = week || [];
     if (!rows.length) {
-        node.replaceChildren(emptyNote("No daily games in the last seven days."));
+        node.replaceChildren(emptyNote(`No ${what.toLowerCase()} in the last seven days.`));
         return;
     }
     node.replaceChildren(
-        el("p", { class: "gl-board-meta", text: "Daily puzzles, last 7 days" }),
+        el("p", { class: "gl-board-meta", text: `${what}, last 7 days` }),
         table("Daily results for the last seven days",
             [{ label: "Player" }, { label: "Played" }, { label: "Wins" }, { label: "Avg", title: "Average guesses per win" }],
             rows.map((r) => el("tr", { class: r.you ? "is-you" : null },
@@ -294,14 +296,14 @@ export function renderWeek(node, week) {
                 el("td", { class: "num", text: formatAverage(r.avgGuesses) })))));
 }
 
-export function renderAllTime(node, allTime) {
+export function renderAllTime(node, allTime, { what = "Daily puzzles" } = {}) {
     const rows = allTime || [];
     if (!rows.length) {
-        node.replaceChildren(emptyNote("No daily games yet."));
+        node.replaceChildren(emptyNote(`No ${what.toLowerCase()} yet.`));
         return;
     }
     node.replaceChildren(
-        el("p", { class: "gl-board-meta", text: "Daily puzzles, all time" }),
+        el("p", { class: "gl-board-meta", text: `${what}, all time` }),
         table("Daily results, all time",
             [{ label: "Player" }, { label: "Wins" }, { label: "Win %" }, { label: "Avg", title: "Average guesses per win" },
              { label: "Streak", title: "Current streak (best)" }, { label: "Best", title: "Fewest guesses", hideNarrow: true }],
@@ -316,9 +318,12 @@ export function renderAllTime(node, allTime) {
                 el("td", { class: "num hide-narrow", text: r.best != null ? String(r.best) : "—" })))));
 }
 
+const PRACTICE_NAMES = { country: "Unlimited", capital: "Capitals", hard: "Hard practice" };
+
+/** kind is the practice board: "country" (every classic region), "capital" or "hard". */
 export function renderUnlimited(node, rows, kind) {
     const list = rows || [];
-    const what = kind === "capital" ? "Capitals" : "Unlimited";
+    const what = PRACTICE_NAMES[kind] || PRACTICE_NAMES.country;
     if (!list.length) {
         node.replaceChildren(emptyNote(`No finished ${what} games yet.`));
         return;

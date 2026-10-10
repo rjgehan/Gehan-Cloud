@@ -4,6 +4,7 @@ import cloud.gehan.globle.model.Kind;
 import cloud.gehan.globle.model.Mode;
 import cloud.gehan.globle.model.Player;
 import cloud.gehan.globle.model.Status;
+import cloud.gehan.globle.model.Variant;
 import cloud.gehan.globle.repository.GameSummary;
 import cloud.gehan.globle.repository.GlobleGameRepository;
 import cloud.gehan.globle.view.Leaderboard;
@@ -23,6 +24,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -43,6 +45,10 @@ import java.util.stream.Collectors;
  *     until midnight, but a give-up today ends it at once.</li>
  * <li><b>Only users who still exist</b> are listed, matched by id and username both
  *     (see {@link Player}).</li>
+ * <li><b>Classic and Hard are separate dailies</b>, each with its own boards, streak and
+ *     distribution; a request asks for one. Rows from before Hard are classic.</li>
+ * <li><b>Practice boards</b> are Countries (classic country games in every region,
+ *     Mainland included), Capitals, and Hard.</li>
  * </ul>
  */
 @Service
@@ -69,12 +75,14 @@ public class LeaderboardService {
         this.clock = clock;
     }
 
-    public Leaderboard leaderboard(Player viewer) {
+    public Leaderboard leaderboard(Player viewer, Variant variant) {
         LocalDate today = clock.today();
         Map<Long, String> existing = users.findAll().stream()
                 .collect(Collectors.toMap(User::getId, User::getUsername));
 
-        List<GameSummary> daily = owned(games.summaries(Mode.DAILY), existing);
+        List<GameSummary> daily = owned(games.summaries(Mode.DAILY), existing).stream()
+                .filter(g -> g.variant() == variant)
+                .toList();
         List<GameSummary> unlimited = owned(games.summaries(Mode.UNLIMITED), existing);
 
         List<GameSummary> played = daily.stream().filter(g -> countsAsPlayed(g, today)).toList();
@@ -83,12 +91,26 @@ public class LeaderboardService {
         List<GameSummary> mine = playedBy.getOrDefault(viewer.username(), List.of());
 
         return new Leaderboard(
+                variant.api(),
                 today(daily, today, viewer),
                 week(played, today, viewer),
                 allTime(playedBy, today, viewer),
-                new Leaderboard.Unlimited(unlimited(unlimited, Kind.COUNTRY, viewer),
-                        unlimited(unlimited, Kind.CAPITAL, viewer)),
+                new Leaderboard.Unlimited(
+                        unlimited(unlimited, g -> g.variant() == Variant.CLASSIC && g.kind() == Kind.COUNTRY, viewer),
+                        unlimited(unlimited, g -> g.variant() == Variant.CLASSIC && g.kind() == Kind.CAPITAL, viewer),
+                        unlimited(unlimited, g -> g.variant() == Variant.HARD, viewer)),
                 me(mine, today));
+    }
+
+    /**
+     * The player's current streak in one daily variant, as the leaderboard shows it,
+     * without working out the rest of the board.
+     */
+    public int currentStreak(Player player, Variant variant) {
+        List<GameSummary> mine = games.summaries(Mode.DAILY, player.id(), player.username()).stream()
+                .filter(g -> g.variant() == variant)
+                .toList();
+        return Streaks.of(mine, clock.today()).current;
     }
 
     // ------------------------------------------------------------------ sections
@@ -180,9 +202,11 @@ public class LeaderboardService {
     }
 
     /** Finished practice games only: one still in progress is neither won nor lost yet. */
-    private static List<Leaderboard.UnlimitedRow> unlimited(List<GameSummary> unlimited, Kind kind, Player viewer) {
+    private static List<Leaderboard.UnlimitedRow> unlimited(List<GameSummary> unlimited,
+                                                            Predicate<GameSummary> board, Player viewer) {
         Map<String, List<GameSummary>> byUser = byUser(unlimited.stream()
-                .filter(g -> g.kind() == kind && g.status() != Status.PLAYING)
+                .filter(board)
+                .filter(g -> g.status() != Status.PLAYING)
                 .toList());
         record Row(Leaderboard.UnlimitedRow view, Double average) {
         }

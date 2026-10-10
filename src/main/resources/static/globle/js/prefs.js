@@ -1,5 +1,6 @@
-// Per-device preferences: units, blind mode, last mode and region, whether the
-// rules have been seen.
+// Per-device preferences: units, the leaderboard and stats sheets' last tabs,
+// whether the welcome has been seen. (Keys from older versions, such as blind,
+// mode and region.*, are no longer read.)
 //
 // localStorage throws in some private-browsing modes and when storage is full or
 // blocked, and none of this is worth breaking the game over, so every access is

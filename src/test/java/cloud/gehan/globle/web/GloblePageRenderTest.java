@@ -79,6 +79,30 @@ class GloblePageRenderTest extends GlobleTestBase {
         assertThat(INLINE_HANDLER.matcher(html).find()).as("inline event handler").isFalse();
     }
 
+    /**
+     * The page opens on the home screen, where the game is chosen: the two dailies
+     * and the practice presets. The old mode switcher, region dropdown and Blind
+     * toggle are gone (blind is part of Hard now), and the first-visit popup and the
+     * help sheet stay short.
+     */
+    @Test
+    void thePageOpensOnTheHomeScreenWithoutTheOldControls() throws Exception {
+        String html = render("jen");
+
+        assertThat(html)
+                .contains("data-view=\"home\"")
+                .contains("id=\"card-classic\" href=\"#/classic\"")
+                .contains("id=\"card-hard\" href=\"#/hard\"")
+                .contains("id=\"btn-home\" href=\"#/\"")
+                .contains("id=\"home-error\"")
+                .contains("id=\"btn-home-retry\"")
+                .doesNotContain("btn-blind")
+                .doesNotContain("<select")
+                .doesNotContain("gl-seg");
+        assertThat(words(dialog(html, "dlg-welcome"))).as("words in the first-visit popup").isLessThanOrEqualTo(25);
+        assertThat(words(dialog(html, "dlg-help"))).as("words in the help sheet, legend aside").isLessThanOrEqualTo(80);
+    }
+
     @Test
     void thePageNeverCarriesTheDaysAnswer() throws Exception {
         days.saveAndFlush(new GlobleDay(DAY_ONE, "MNG", 1, clock.instant()));
@@ -96,7 +120,8 @@ class GloblePageRenderTest extends GlobleTestBase {
     @Test
     void thePagesOwnFilesAreServed() throws Exception {
         var jen = player("jen");
-        for (String js : List.of("/globle/js/main.js", "/globle/js/api.js", "/globle/vendor/d3.min.js")) {
+        for (String js : List.of("/globle/js/main.js", "/globle/js/api.js", "/globle/js/modes.js",
+                "/globle/vendor/d3.min.js")) {
             String type = mvc.perform(get(js).with(jen))
                     .andExpect(status().isOk())
                     .andReturn().getResponse().getContentType();
@@ -134,6 +159,32 @@ class GloblePageRenderTest extends GlobleTestBase {
         mvc.perform(get("/globle").with(jen))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", containsString("no-store")));
+    }
+
+    /** The content of one {@code <dialog>}, by id: from the end of its opening tag to its closing tag. */
+    private static String dialog(String html, String id) {
+        int tag = html.indexOf("<dialog class=\"gl-sheet");
+        int at = html.indexOf("id=\"" + id + "\"", tag);
+        assertThat(tag).as("a dialog").isPositive();
+        assertThat(at).as("dialog " + id).isPositive();
+        int start = html.indexOf('>', at) + 1;
+        return html.substring(start, html.indexOf("</dialog>", start));
+    }
+
+    /**
+     * Words a reader sees: tags, screen-reader-only text and the colour legend's
+     * labels left out, entities as spaces, and anything that is not a letter, digit
+     * or apostrophe a separator.
+     */
+    private static int words(String markup) {
+        String text = markup
+                .replaceAll("(?s)<span class=\"sr-only\">.*?</span>", " ")
+                .replaceAll("(?s)<div class=\"gl-legend-labels\">.*?</div>", " ")
+                .replaceAll("<[^>]*>", " ")
+                .replaceAll("&[a-z]+;", " ")
+                .replaceAll("[^\\p{L}\\p{N}']+", " ")
+                .trim();
+        return text.isEmpty() ? 0 : text.split(" ").length;
     }
 
     private String render(String username) throws Exception {

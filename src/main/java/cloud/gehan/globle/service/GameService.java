@@ -8,6 +8,7 @@ import cloud.gehan.globle.model.Kind;
 import cloud.gehan.globle.model.Player;
 import cloud.gehan.globle.model.Region;
 import cloud.gehan.globle.model.Status;
+import cloud.gehan.globle.model.Variant;
 import cloud.gehan.globle.repository.GlobleGameRepository;
 import cloud.gehan.globle.view.GameState;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -31,7 +32,7 @@ import java.util.function.Supplier;
  * <p><b>One change at a time.</b> Everything that writes games runs inside one
  * transaction under a single app-wide lock ({@link GlobleWrites}), held until the
  * transaction commits. That is what makes a double-tapped guess land once, keeps a
- * daily to a single row, and keeps "at most one unlimited game in progress per kind"
+ * daily to a single row, and keeps "at most one unlimited game in progress per slot"
  * true without a constraint SQLite cannot express. The lock is app-wide rather than
  * per player because SQLite has one writer at a time: two players' transactions open
  * at once would deadlock, and SQLite answers that with an immediate SQLITE_BUSY
@@ -42,6 +43,11 @@ import java.util.function.Supplier;
  * <p>The day's answer is fetched before the transaction is opened, never inside:
  * choosing it may write, in a transaction of its own that must not wait behind an open
  * one of ours.
+ *
+ * <p><b>Variants.</b> There are two dailies a day, classic and Hard, each with its own
+ * row per player. A practice game lives in a <i>slot</i>, (kind, region, variant):
+ * Europe, Mainland, Capitals and Hard practice each keep their own game in progress
+ * and resume independently. Hard is for countries only.
  */
 @Service
 @ConditionalOnProperty(prefix = "globle", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -50,17 +56,20 @@ public class GameService {
     private final GlobleGameRepository games;
     private final DailyPuzzles puzzles;
     private final CountryCatalog catalog;
+    private final AnswerPools pools;
     private final GameViews views;
     private final GlobleClock clock;
     private final GlobleProperties properties;
     private final TransactionTemplate transaction;
     private final Random random = new SecureRandom();
 
-    public GameService(GlobleGameRepository games, DailyPuzzles puzzles, CountryCatalog catalog, GameViews views,
-                       GlobleClock clock, GlobleProperties properties, PlatformTransactionManager transactions) {
+    public GameService(GlobleGameRepository games, DailyPuzzles puzzles, CountryCatalog catalog, AnswerPools pools,
+                       GameViews views, GlobleClock clock, GlobleProperties properties,
+                       PlatformTransactionManager transactions) {
         this.games = games;
         this.puzzles = puzzles;
         this.catalog = catalog;
+        this.pools = pools;
         this.views = views;
         this.clock = clock;
         this.properties = properties;
@@ -69,27 +78,27 @@ public class GameService {
 
     // ------------------------------------------------------------------ daily
 
-    /** Today's puzzle. Looking stores nothing: a row appears with the first guess. */
-    public GameState daily(Player player) {
+    /** Today's puzzle in this variant. Looking stores nothing: a row appears with the first guess. */
+    public GameState daily(Player player, Variant variant) {
         LocalDate today = clock.today();
-        Optional<GlobleGame> game = games.findDaily(player, today);
+        Optional<GlobleGame> game = games.findDaily(player, today, variant);
         if (game.isEmpty()) {
-            return views.untouchedDaily(today);
+            return views.untouchedDaily(today, variant);
         }
-        return views.of(game.get(), puzzles.answerFor(today));
+        return views.of(game.get(), puzzles.answerFor(variant, today));
     }
 
     /**
-     * A guess at today's puzzle. {@code expectedDate} is the date of the puzzle the page
-     * is showing, if it says; see {@link #today(String)}.
+     * A guess at today's puzzle in this variant. {@code expectedDate} is the date of the
+     * puzzle the page is showing, if it says; see {@link #today(String)}.
      */
-    public GameState guessDaily(Player player, String rawCode, String expectedDate) {
+    public GameState guessDaily(Player player, Variant variant, String rawCode, String expectedDate) {
         LocalDate today = today(expectedDate);
         Country guess = parse(rawCode);
-        String answer = puzzles.answerFor(today);
+        String answer = puzzles.answerFor(variant, today);
         return write(() -> {
-            GlobleGame game = games.findDaily(player, today)
-                    .orElseGet(() -> GlobleGame.daily(player, today, clock.now()));
+            GlobleGame game = games.findDaily(player, today, variant)
+                    .orElseGet(() -> GlobleGame.daily(player, today, variant, clock.now()));
             applyGuess(game, guess, answer);
             return views.of(games.save(game), answer);
         });
@@ -99,12 +108,12 @@ public class GameService {
      * Giving up before guessing still counts: it creates the row, as a loss.
      * {@code expectedDate} is as for {@link #guessDaily}.
      */
-    public GameState giveUpDaily(Player player, String expectedDate) {
+    public GameState giveUpDaily(Player player, Variant variant, String expectedDate) {
         LocalDate today = today(expectedDate);
-        String answer = puzzles.answerFor(today);
+        String answer = puzzles.answerFor(variant, today);
         return write(() -> {
-            GlobleGame game = games.findDaily(player, today)
-                    .orElseGet(() -> GlobleGame.daily(player, today, clock.now()));
+            GlobleGame game = games.findDaily(player, today, variant)
+                    .orElseGet(() -> GlobleGame.daily(player, today, variant, clock.now()));
             giveUp(game);
             return views.of(games.save(game), answer);
         });
@@ -112,31 +121,44 @@ public class GameService {
 
     // ------------------------------------------------------------------ unlimited
 
-    /** The game in progress of this kind, if any; it picks up on any device. */
-    public Optional<GameState> currentUnlimited(Player player, Kind kind) {
-        return games.findPlaying(player, kind).stream()
+    /**
+     * The game in progress in one slot, if any; it picks up on any device.
+     *
+     * @param region null for any region: the newest game of this kind and variant in
+     *               progress wherever it was started. That is how the API answered
+     *               before slots, when a player had at most one game per kind, so a
+     *               game started then is still found by a request that names no region.
+     */
+    public Optional<GameState> currentUnlimited(Player player, Kind kind, Region region, Variant variant) {
+        requirePlayable(kind, variant);
+        List<GlobleGame> playing = region == null
+                ? games.findPlaying(player, kind, variant)
+                : games.findPlaying(player, kind, region, variant);
+        return playing.stream()
                 .findFirst()
                 .map(game -> views.of(game, game.getAnswerCode()));
     }
 
     /**
-     * Starts a fresh game, drawing the answer uniformly from the region, never the answer
-     * of the player's previous game of this kind.
+     * Starts a fresh game in a slot, drawing the answer from the slot's pool (weighted
+     * for Hard; see {@link AnswerPools}), never the answer of the player's previous game
+     * in that slot.
      *
-     * <p>A game of the same kind still in progress is abandoned. With at least one guess
-     * it is recorded as given up, so starting over cannot be used to dodge a loss. With
-     * none it is simply dropped: nothing about its answer was shown, so there is nothing
-     * to dodge, and changing the region or tapping "New game" twice costs nothing. A
-     * dropped game is not a previous game either, so the one to avoid repeating is the
-     * last one actually played.
+     * <p>A game in the same slot still in progress is abandoned; games in other slots
+     * are left alone. With at least one guess it is recorded as given up, so starting
+     * over cannot be used to dodge a loss. With none it is simply dropped: nothing about
+     * its answer was shown, so there is nothing to dodge, and tapping "New game" twice
+     * costs nothing. A dropped game is not a previous game either, so the one to avoid
+     * repeating is the last one actually played.
      *
      * <p>The draw happens inside the write, so two quick starts see the same history.
      */
-    public GameState newUnlimited(Player player, Kind kind, Region region) {
-        List<Country> pool = catalog.answerable(region, kind);
+    public GameState newUnlimited(Player player, Kind kind, Region region, Variant variant) {
+        requirePlayable(kind, variant);
+        AnswerPools.Pool pool = pools.pool(kind, region, variant);
         return write(() -> {
             Instant now = clock.now();
-            for (GlobleGame abandoned : games.findPlaying(player, kind)) {
+            for (GlobleGame abandoned : games.findPlaying(player, kind, region, variant)) {
                 if (abandoned.getGuessCount() == 0) {
                     games.delete(abandoned);
                 } else {
@@ -144,11 +166,13 @@ public class GameService {
                     games.save(abandoned);
                 }
             }
-            String last = games.findLastUnlimited(player, kind).map(GlobleGame::getAnswerCode).orElse(null);
-            List<Country> fresh = pool.stream().filter(country -> !country.code().equals(last)).toList();
-            List<Country> from = fresh.isEmpty() ? pool : fresh;
-            String answer = from.get(random.nextInt(from.size())).code();
-            GlobleGame game = games.save(GlobleGame.unlimited(player, kind, region, answer, now));
+            String last = games.findLastUnlimited(player, kind, region, variant)
+                    .map(GlobleGame::getAnswerCode).orElse(null);
+            String answer = pool.draw(random, country -> !country.code().equals(last))
+                    .or(() -> pool.draw(random, country -> true))
+                    .orElseThrow()
+                    .code();
+            GlobleGame game = games.save(GlobleGame.unlimited(player, kind, region, variant, answer, now));
             return views.of(game, answer);
         });
     }
@@ -171,6 +195,13 @@ public class GameService {
     }
 
     // ------------------------------------------------------------------ rules
+
+    /** Hard is a country game: there is no Hard capitals. */
+    private static void requirePlayable(Kind kind, Variant variant) {
+        if (variant == Variant.HARD && kind != Kind.COUNTRY) {
+            throw GlobleException.badRequest();
+        }
+    }
 
     /**
      * Today's puzzle date, unless the page says it is showing another one.

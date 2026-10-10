@@ -67,8 +67,9 @@ public class CountryCatalog {
         this.indexByCode = indexCodes(countries);
         this.km = parseDistances(read(json, distancesJson, DISTANCES), indexByCode);
         this.answers = groupAnswers(countries);
-        log.info("Globle catalogue loaded: {} places, {} possible answers",
-                countries.size(), answers.get(Kind.COUNTRY).get(Region.WORLD).size());
+        log.info("Globle catalogue loaded: {} places, {} possible answers, {} of them on the mainland",
+                countries.size(), answers.get(Kind.COUNTRY).get(Region.WORLD).size(),
+                answers.get(Kind.COUNTRY).get(Region.MAINLAND).size());
     }
 
     /** Every country and territory, sorted by name. */
@@ -99,7 +100,8 @@ public class CountryCatalog {
 
     /**
      * The countries a game of this kind may pick as its mystery: answer countries in
-     * the region, and for a capital game only those with a capital.
+     * the region, and for a capital game only those with a capital. Every one equally;
+     * Hard's weighting is applied on top of this by AnswerPools.
      */
     public List<Country> answerable(Region region, Kind kind) {
         return answers.get(kind).get(region);
@@ -156,6 +158,8 @@ public class CountryCatalog {
                     strings(node.get("aliases")),
                     node.path("answer").asBoolean(false),
                     region,
+                    difficulty(node, where),
+                    flag(node, "smallIsland", where),
                     latitude(node, where),
                     longitude(node, where),
                     cap));
@@ -245,7 +249,7 @@ public class CountryCatalog {
             for (Region region : Region.values()) {
                 List<Country> pool = countries.stream()
                         .filter(Country::answer)
-                        .filter(c -> region.includes(c.region()))
+                        .filter(c -> region.includes(c.region(), c.smallIsland()))
                         .filter(c -> kind != Kind.CAPITAL || c.hasCapital())
                         .toList();
                 if (pool.isEmpty()) {
@@ -265,6 +269,28 @@ public class CountryCatalog {
             throw inconsistent(COUNTRIES + " entry #" + (position + 1) + " has no " + field);
         }
         return value.asText();
+    }
+
+    /**
+     * Required, so a countries.json from before Hard is refused rather than played with
+     * every country quietly given the same difficulty.
+     */
+    private static int difficulty(JsonNode node, String where) {
+        JsonNode value = node.get("difficulty");
+        if (value == null || !value.isIntegralNumber()
+                || value.asInt() < Country.EASIEST || value.asInt() > Country.HARDEST) {
+            throw inconsistent(where + ": difficulty must be a whole number from "
+                    + Country.EASIEST + " to " + Country.HARDEST);
+        }
+        return value.asInt();
+    }
+
+    private static boolean flag(JsonNode node, String field, String where) {
+        JsonNode value = node.get(field);
+        if (value == null || !value.isBoolean()) {
+            throw inconsistent(where + ": " + field + " must be true or false");
+        }
+        return value.asBoolean();
     }
 
     private static List<String> strings(JsonNode array) {

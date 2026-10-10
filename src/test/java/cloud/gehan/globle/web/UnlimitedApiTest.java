@@ -54,10 +54,11 @@ class UnlimitedApiTest extends GlobleTestBase {
         assertThat(resumed.get("answer").isNull()).isTrue();
     }
 
+    /** Only a game in the same slot is abandoned; see UnlimitedSlotsTest for the others. */
     @Test
     void startingAgainAbandonsTheGameInProgressAsAGiveUp() throws Exception {
         var jen = player("jen");
-        long first = newGame(jen, "country", "world").get("id").asLong();
+        long first = newGame(jen, "country", "europe").get("id").asLong();
         guessUnlimited(jen, first, farFrom(answerOf(first)));
 
         long second = newGame(jen, "country", "europe").get("id").asLong();
@@ -74,14 +75,14 @@ class UnlimitedApiTest extends GlobleTestBase {
 
     /**
      * A game with no guesses has shown nothing about its answer, so dropping it dodges
-     * nothing: changing the region or tapping "New game" twice must not add a loss.
+     * nothing: tapping "New game" twice must not add a loss.
      */
     @Test
     void startingAgainBeforeAnyGuessDropsTheUntouchedGame() throws Exception {
         var jen = player("jen");
         long first = newGame(jen, "country", "world").get("id").asLong();
 
-        long second = newGame(jen, "country", "europe").get("id").asLong();
+        long second = newGame(jen, "country", "world").get("id").asLong();
 
         // Compared by contents rather than id: SQLite may hand the freed id out again.
         assertThat(games.findAll()).extracting(GlobleGame::getId).containsExactly(second);

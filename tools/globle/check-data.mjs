@@ -11,12 +11,13 @@
 
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import { geoArea, geoContains } from 'd3-geo';
 import { feature } from 'topojson-client';
 
 import { EXTRA_ANSWERS, UN_MEMBERS } from './lib/catalog.mjs';
-import { normalise, OUTPUTS, REGIONS } from './lib/common.mjs';
-import { buildTree, chordToKm, closestChord, densifiedPoints, toXYZ } from './lib/sphere.mjs';
+import { normalise, OUTPUTS, REGIONS, REPO } from './lib/common.mjs';
+import { buildTree, chordToKm, closestChord, densifiedPoints, EARTH_RADIUS_KM, toXYZ } from './lib/sphere.mjs';
 
 const require = createRequire(import.meta.url);
 const failures = [];
@@ -31,7 +32,7 @@ const world = JSON.parse(fs.readFileSync(OUTPUTS.world, 'utf8'));
 
 // ---------------------------------------------------------------- countries.json
 
-const KEYS = ['code', 'name', 'iso2', 'aliases', 'answer', 'region', 'lat', 'lng', 'capital'];
+const KEYS = ['code', 'name', 'iso2', 'aliases', 'answer', 'region', 'difficulty', 'smallIsland', 'lat', 'lng', 'capital'];
 const CAPITAL_KEYS = ['name', 'aliases', 'lat', 'lng'];
 const byCode = new Map();
 const isLat = (v) => Number.isFinite(v) && v >= -90 && v <= 90;
@@ -50,6 +51,12 @@ for (const c of countries) {
   check(isStrings(c.aliases), `${id}: bad aliases`);
   check(typeof c.answer === 'boolean', `${id}: answer not boolean`);
   check(REGIONS.has(c.region), `${id}: bad region ${c.region}`);
+  check(Number.isInteger(c.difficulty) && c.difficulty >= 1 && c.difficulty <= 5, `${id}: difficulty ${c.difficulty} is not 1..5`);
+  check(typeof c.smallIsland === 'boolean', `${id}: smallIsland not boolean`);
+  if (!c.answer) {
+    check(c.difficulty === 5, `${id}: never the answer, so difficulty should be 5, not ${c.difficulty}`);
+    check(c.smallIsland === false, `${id}: never the answer, so it cannot be a small island nation`);
+  }
   check(isLat(c.lat) && isLng(c.lng), `${id}: bad label point`);
   if (c.capital !== null) {
     const cap = c.capital;
@@ -81,6 +88,20 @@ for (const c of countries) {
     const key = normalise(n);
     if (owners.has(key) && owners.get(key) !== c.code) fail(`"${n}" names both ${owners.get(key)} and ${c.code}`);
     owners.set(key, c.code);
+  }
+}
+
+// Hard has no list to pick from, so a typed name goes through the client's own
+// matcher (match.js findExact). That matcher also drops punctuation, reads "St" as
+// "Saint" and ignores "the"/"of"/"and". Every name and alias must still find its
+// own place there. It is imported as a data: URL so it loads as ESM on any Node 20.
+const matchJs = fs.readFileSync(path.join(REPO, 'src/main/resources/static/globle/js/match.js'), 'utf8');
+const { buildIndex, findExact } = await import('data:text/javascript,' + encodeURIComponent(matchJs));
+const typed = buildIndex(countries.map((c) => ({ ...c, canBeAnswer: c.answer })), 'country');
+for (const c of countries) {
+  for (const n of [c.name, ...c.aliases]) {
+    const got = findExact(typed, n);
+    check(got === c.code, `"${n}" cannot be typed in Hard: the matcher finds ${got ?? 'no single place'}, not ${c.code}`);
   }
 }
 
@@ -152,6 +173,80 @@ for (const f of shapes) {
 check(shapeByCode.size === countries.length && countries.every((c) => shapeByCode.has(c.code)),
   'world.json codes differ from countries.json');
 
+// No border drawn as coast. The globe draws the arcs only one country uses as
+// coastline, so a land border has to be one arc both sides share. Where one
+// side lacks a junction vertex, the two sides come out as separate one-country
+// arcs lying on top of each other (Algeria against Morocco and Western Sahara
+// was a 26 km tick in the Sahara until build-data split T-junctions). So no
+// two one-country arcs, of the same country or not, may run along each other:
+// within a grid unit of the same line for more than half a grid unit. One grid
+// unit, as the build uses: a looser test flags real coasts that leave a point
+// at a narrow angle, such as Spain's and Gibraltar's shores of the Bay of
+// Gibraltar, 28° apart. Hops across the antimeridian span the whole grid in
+// planar terms and are left out.
+{
+  const [[sx, sy], [tx, ty]] = [world.transform.scale, world.transform.translate];
+  const users = new Map();
+  const walk = (arcs, id) => {
+    for (const a of arcs) {
+      if (Array.isArray(a)) { walk(a, id); continue; }
+      const i = a < 0 ? ~a : a;
+      if (!users.has(i)) users.set(i, []);
+      users.get(i).push(id);
+    }
+  };
+  for (const g of world.objects.countries.geometries) walk(g.arcs, g.id);
+  const segs = []; // one-country arc segments, in grid units
+  world.arcs.forEach((arc, i) => {
+    if (users.get(i)?.length !== 1) return;
+    let x = 0, y = 0;
+    const pts = arc.map(([dx, dy]) => [x += dx, y += dy]);
+    for (let k = 1; k < pts.length; k++) {
+      const [a, b] = [pts[k - 1], pts[k]];
+      const hop = Math.abs(b[0] - a[0]) * sx > 180;
+      if (!hop && (a[0] !== b[0] || a[1] !== b[1])) segs.push({ arc: i, id: users.get(i)[0], a, b });
+    }
+  });
+  const CELL = 256;
+  const cells = new Map();
+  segs.forEach((s, n) => {
+    for (let cx = Math.floor((Math.min(s.a[0], s.b[0]) - 1) / CELL); cx <= Math.floor((Math.max(s.a[0], s.b[0]) + 1) / CELL); cx++) {
+      for (let cy = Math.floor((Math.min(s.a[1], s.b[1]) - 1) / CELL); cy <= Math.floor((Math.max(s.a[1], s.b[1]) + 1) / CELL); cy++) {
+        const key = cx * 1024 + cy;
+        if (!cells.has(key)) cells.set(key, []);
+        cells.get(key).push(n);
+      }
+    }
+  });
+  /** How far t runs along s, within one grid unit of s's line (0 if it strays). */
+  const alongside = (s, t) => {
+    const dx = s.b[0] - s.a[0], dy = s.b[1] - s.a[1], len = Math.hypot(dx, dy);
+    const off = (p) => Math.abs(dx * (p[1] - s.a[1]) - dy * (p[0] - s.a[0])) / len;
+    if (off(t.a) > 1 || off(t.b) > 1) return 0;
+    const at = (p) => (dx * (p[0] - s.a[0]) + dy * (p[1] - s.a[1])) / len;
+    return Math.min(len, Math.max(at(t.a), at(t.b))) - Math.max(0, Math.min(at(t.a), at(t.b)));
+  };
+  const overlaps = new Map();
+  const seen = new Set();
+  for (const list of cells.values()) {
+    for (let u = 0; u < list.length; u++) {
+      for (let v = u + 1; v < list.length; v++) {
+        const [s, t] = [segs[list[u]], segs[list[v]]];
+        if (s.arc === t.arc) continue;
+        const run = Math.max(alongside(s, t), alongside(t, s));
+        const pair = `${Math.min(list[u], list[v])}-${Math.max(list[u], list[v])}`;
+        if (run <= 0.5 || seen.has(pair)) continue;
+        seen.add(pair);
+        const key = [s.id, t.id].sort().join('/');
+        if (!overlaps.has(key)) overlaps.set(key, { units: 0, at: `${(s.a[1] * sy + ty).toFixed(3)},${(s.a[0] * sx + tx).toFixed(3)}` });
+        overlaps.get(key).units += run;
+      }
+    }
+  }
+  check(overlaps.size === 0, `world.json draws borders as coast (one-country arcs on top of each other): ${
+    [...overlaps].map(([key, o]) => `${key} for ${o.units.toFixed(1)} grid units at ${o.at}`).join(', ')}`);
+}
+
 // ---------------------------------------------------------------- distances vs drawn shapes
 
 // The colours have to agree with what the player sees: every pair that can
@@ -175,6 +270,61 @@ for (let i = 0; i < n; i++) {
 }
 check(offDrawn.length === 0,
   `${offDrawn.length} answer pairs differ from the drawn shapes by more than max(150 km, 15%): ${offDrawn.slice(0, 12).join(', ')}`);
+
+// ---------------------------------------------------------------- difficulty
+
+// Hard mode's default globle.hard-weights: how many tickets an answer of each
+// tier gets in the draw. The server owns the real setting; this copy only
+// prints the mix the tiers give.
+const HARD_WEIGHTS = { 1: 0, 2: 1, 3: 3, 4: 6, 5: 8 };
+// The default globle.answer-repeat-window-days. Each daily caps it at a third
+// of its own pool (DailyPuzzles), so that is 60 days for classic and 55 for Hard.
+const REPEAT_WINDOW_DAYS = 60;
+// Each tier between these sizes, so none swallows the hard pool or vanishes.
+const TIER_SIZE = [20, 55];
+// The examples the owner gave for each end of the scale.
+const TIER_1 = ['USA', 'CHN', 'RUS', 'BRA', 'IND', 'AUS', 'CAN', 'FRA', 'DEU', 'GBR', 'JPN', 'ITA', 'ESP', 'MEX', 'EGY'];
+const TIER_5 = ['AND', 'LIE', 'MCO', 'SMR', 'VAT', 'TON', 'TUV', 'NRU', 'KNA', 'SWZ', 'LSO', 'DJI', 'COM', 'STP',
+  'GNQ', 'GNB', 'BTN', 'BRN', 'TLS'];
+
+const tiers = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+for (const c of answers) tiers[c.difficulty]?.push(c.code);
+for (const [tier, list] of Object.entries(tiers)) {
+  check(list.length >= TIER_SIZE[0] && list.length <= TIER_SIZE[1],
+    `difficulty ${tier} has ${list.length} answers, expected ${TIER_SIZE.join('..')}`);
+}
+for (const code of TIER_1) check(byCode.get(code)?.difficulty === 1, `${code} should be difficulty 1, not ${byCode.get(code)?.difficulty}`);
+for (const code of TIER_5) check(byCode.get(code)?.difficulty === 5, `${code} should be difficulty 5, not ${byCode.get(code)?.difficulty}`);
+
+// ---------------------------------------------------------------- small island nations
+
+// "Mainland only" means no tiny island nations: Japan still counts, Tonga does
+// not. These are the owner's lists, and between them they pin the rule's
+// edges: Solomon Islands is under the 30,000 km² cap, Taiwan over it; Haiti,
+// Timor-Leste and Brunei are small but share their islands. Microstates on a
+// mainland are not islands.
+const MAINLAND_POOL = ['JPN', 'GBR', 'IRL', 'ISL', 'CUB', 'NZL', 'MDG', 'LKA', 'PHL', 'IDN', 'TWN', 'HTI', 'DOM',
+  'PNG', 'TLS', 'BRN', 'AUS', 'AND', 'VAT', 'MCO', 'SMR', 'LIE', 'LUX'];
+const SMALL_ISLANDS = ['TON', 'FJI', 'JAM', 'BHS', 'TTO', 'BRB', 'MLT', 'CYP', 'BHR', 'SGP', 'MDV', 'MUS', 'SYC',
+  'COM', 'STP', 'CPV', 'SLB', 'VUT', 'WSM', 'KIR', 'TUV', 'NRU', 'PLW', 'MHL', 'FSM', 'LCA', 'VCT', 'GRD', 'ATG',
+  'DMA', 'KNA'];
+
+const smallIslands = answers.filter((c) => c.smallIsland).map((c) => c.code);
+for (const code of MAINLAND_POOL) check(byCode.get(code)?.smallIsland === false, `${code} should be in the mainland pool`);
+const extraSmall = smallIslands.filter((code) => !SMALL_ISLANDS.includes(code));
+const missingSmall = SMALL_ISLANDS.filter((code) => !smallIslands.includes(code));
+check(extraSmall.length === 0, `small island nations not on the expected list: ${extraSmall}`);
+check(missingSmall.length === 0, `expected small island nations not flagged: ${missingSmall}`);
+// The parts of the rule these files can show on their own: no land border
+// with another answer, and a drawn shape under the area cap.
+const smallKm2 = new Map();
+for (const code of smallIslands) {
+  const neighbour = answers.find((c) => c.code !== code && dist(code, c.code) === 0);
+  check(!neighbour, `${code} is a small island nation but borders ${neighbour?.code}`);
+  if (!shapeByCode.has(code)) continue; // already a failure above
+  smallKm2.set(code, geoArea(shapeByCode.get(code)) * EARTH_RADIUS_KM ** 2);
+  check(smallKm2.get(code) < 30000, `${code} is a small island nation but is drawn ${smallKm2.get(code).toFixed(0)} km²`);
+}
 
 // ---------------------------------------------------------------- points vs shapes
 
@@ -275,6 +425,60 @@ console.log(`world.json      ${kib(sizes.world)}  ${shapes.length} shapes`);
 const regionCounts = {};
 for (const c of answers) regionCounts[c.region] = (regionCounts[c.region] ?? 0) + 1;
 console.log(`answers by region: ${JSON.stringify(regionCounts)}`);
+console.log(`answers by difficulty: ${Object.entries(tiers).map(([t, l]) => `${t}: ${l.length}`).join(', ')}`);
+const tickets = Object.entries(tiers).map(([t, l]) => [t, l.length, HARD_WEIGHTS[t], l.length * HARD_WEIGHTS[t]]);
+const totalTickets = tickets.reduce((sum, [, , , m]) => sum + m, 0);
+console.log(`hard pool (default weights ${Object.values(HARD_WEIGHTS).join('/')}): `
+  + `${tickets.filter(([, , w]) => w > 0).reduce((sum, [, size]) => sum + size, 0)} answers`);
+for (const [t, size, w, m] of tickets) {
+  const share = totalTickets ? (100 * m) / totalTickets : 0;
+  const each = w > 0 ? `  (${(share / size).toFixed(2)}% each)` : '  (never drawn)';
+  console.log(`  tier ${t}  ${String(size).padStart(3)} × ${w} = ${String(m).padStart(3)}  ${share.toFixed(1).padStart(5)}%${each}`);
+}
+
+/**
+ * The tier mix of the Hard daily in the long run. The shares above are for one
+ * draw, which is what Hard practice gets. The daily also skips its own answers
+ * from the last window days and the day's classic answer, and the hardest tiers
+ * are drawn most, so they spend the most time skipped. This plays the server's
+ * rules (DailyPuzzles) day after day with a fixed seed, so the numbers it prints
+ * are stable from run to run.
+ */
+function hardDailyMix(days) {
+  let seed = 0x9e3779b9;
+  const random = () => { // mulberry32
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const draw = (pool, skip) => {
+    const open = pool.filter(([code]) => !skip.has(code));
+    let ticket = random() * open.reduce((sum, [, w]) => sum + w, 0);
+    for (const [code, w] of open) if ((ticket -= w) < 0) return code;
+    return open.at(-1)[0];
+  };
+  const classicPool = answers.map((c) => [c.code, 1]);
+  const hardPool = answers.filter((c) => HARD_WEIGHTS[c.difficulty] > 0).map((c) => [c.code, HARD_WEIGHTS[c.difficulty]]);
+  const classicWindow = Math.min(REPEAT_WINDOW_DAYS, Math.floor(classicPool.length / 3));
+  const hardWindow = Math.min(REPEAT_WINDOW_DAYS, Math.floor(hardPool.length / 3));
+  const classic = [], hard = [];
+  const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  for (let day = 0; day < days; day++) {
+    classic.push(draw(classicPool, new Set(classic.slice(-classicWindow))));
+    hard.push(draw(hardPool, new Set([...hard.slice(-hardWindow), classic.at(-1)])));
+    counts[byCode.get(hard.at(-1)).difficulty]++;
+  }
+  return { hardWindow, counts };
+}
+const DAYS = 100_000;
+const mix = hardDailyMix(DAYS);
+console.log(`hard daily over ${DAYS.toLocaleString('en')} simulated days (no answer from its last ${mix.hardWindow}, never the classic one): `
+  + Object.entries(mix.counts).filter(([t]) => HARD_WEIGHTS[t] > 0)
+    .map(([t, k]) => `tier ${t} ${((100 * k) / DAYS).toFixed(1)}%`).join(', '));
+const biggestSmall = [...smallKm2].sort((a, b) => b[1] - a[1])[0];
+console.log(`mainland pool: ${answers.length - smallIslands.length} answers; ${smallIslands.length} small island nations left out`
+  + (biggestSmall ? ` (largest drawn: ${biggestSmall[0]}, ${Math.round(biggestSmall[1]).toLocaleString('en')} km²)` : ''));
 if (notes.length) {
   console.log(`\n${notes.length} notes (differences from world-countries; review, not failures):`);
   for (const note of notes) console.log(`  - ${note}`);

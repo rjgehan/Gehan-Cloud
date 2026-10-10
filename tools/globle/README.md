@@ -6,7 +6,7 @@ directory exists so they can be regenerated and audited.
 
 | File | What it holds | Used by |
 | --- | --- | --- |
-| `src/main/resources/globle/countries.json` | 248 countries and territories: code, name, flag code, aliases, whether it can be an answer, region, a label point, capital | server |
+| `src/main/resources/globle/countries.json` | 248 countries and territories: code, name, flag code, aliases, whether it can be an answer, region, difficulty (1–5), whether it is a small island nation, a label point, capital | server |
 | `src/main/resources/globle/distances.json` | 248×248 matrix of minimum great-circle km between every pair (0 = they touch) | server |
 | `src/main/resources/static/globle/world.json` | TopoJSON, one `countries` object, `id` = code, `properties.name` | browser |
 
@@ -22,8 +22,9 @@ npm run check     # validates them; exits non-zero on any failure
 ```
 
 The build is deterministic, so a rebuild on unchanged inputs gives no diff.
-Edit `lib/catalog.mjs` to rename a country, add an alias or move a capital;
-edit `lib/sources.mjs` to change how Natural Earth features become countries.
+Edit `lib/catalog.mjs` to rename a country, add an alias, move a capital or
+change a difficulty tier; edit `lib/sources.mjs` to change how Natural Earth
+features become countries.
 
 ## Sources and licences
 
@@ -31,7 +32,7 @@ edit `lib/sources.mjs` to change how Natural Earth features become countries.
 | --- | --- | --- |
 | [Natural Earth](https://www.naturalearthdata.com/) admin-0 countries, 1:10m and 1:50m, via [`world-atlas`](https://github.com/topojson/world-atlas) 2.0.2 | all geometry | public domain (package ISC) |
 | [`i18n-iso-countries`](https://github.com/michaelwittig/node-i18n-iso-countries) | ISO numeric → alpha-3/alpha-2 codes, extra English aliases | MIT |
-| `lib/catalog.mjs`, written by hand | display names, aliases, regions, answer set, capitals and their coordinates | part of this repo |
+| `lib/catalog.mjs`, written by hand | display names, aliases, regions, answer set, capitals and their coordinates, difficulty tiers | part of this repo |
 | `d3-geo`, `topojson-client`, `topojson-server`, `polylabel` | geometry code only | ISC |
 | [`world-countries`](https://github.com/mledoze/countries) 5.1.0 (dev only) | **cross-checks in `check-data.mjs` only** — borders, UN membership, capital names | ODbL-1.0 |
 
@@ -69,6 +70,41 @@ always means "touching". Working in 3-D makes the antimeridian a non-issue
 (Russia/USA across the Bering Strait comes out at 72 km; the Diomedes, 4 km
 apart, are too small for the globe to draw).
 
+**Small island nations** (`smallIsland`) are what "mainland only" games
+leave out: Tonga goes, Japan stays. An answer country is one when all three
+hold:
+
+- none of its land is on a continental mainland (Afro-Eurasia, the Americas,
+  Australia), so it is islands only;
+- its 10m land area is under 30,000 km²;
+- it has no land border with another answer country.
+
+The mainlands are found from the geometry. Every 10m polygon is a node, and
+two polygons are one landmass when they share a vertex. Natural Earth shares
+arcs along land borders, so a continent's countries join up, while an island
+shares a vertex with nothing. A few countries' largest polygons anchor each
+mainland: Russia, China, India, France, Egypt and South Africa for
+Afro-Eurasia; the USA, Canada, Mexico, Brazil and Argentina for the Americas;
+Australia. The build fails if an anchor lands on the wrong landmass. Vatican
+City's 10m polygon collapses to a line, but its vertices still join Italy's.
+
+That gives these 31: Antigua and Barbuda, Bahamas, Bahrain, Barbados, Cabo
+Verde, Comoros, Cyprus, Dominica, Fiji, Grenada, Jamaica, Kiribati, Maldives,
+Malta, Marshall Islands, Mauritius, Micronesia, Nauru, Palau, Saint Kitts and
+Nevis, Saint Lucia, Saint Vincent and the Grenadines, Samoa, São Tomé and
+Príncipe, Seychelles, Singapore, Solomon Islands, Tonga, Trinidad and Tobago,
+Tuvalu, Vanuatu. The edges of the rule:
+
+- Solomon Islands (27,300 km²) is under the area cap. Taiwan (36,300 km²),
+  Sri Lanka, Iceland and Cuba are over it.
+- Haiti (27,000 km²), Timor-Leste and Brunei are under the cap and islands
+  only, but each shares its island with another answer, so a neighbour
+  lights up next to it the way it would on a mainland. They stay.
+- Singapore is 2 km from Malaysia, not touching, so it is out. Cyprus has no
+  land border once the UK bases are folded into it, so it is out too.
+
+Territories are never the answer, so they are never small island nations.
+
 **Label points** (`lat`/`lng`) are the pole of inaccessibility of each
 country's largest 10m polygon, found with polylabel in an azimuthal
 equidistant projection centred on that polygon (`lib/label.mjs`). That keeps
@@ -80,6 +116,18 @@ quantisation it came in. 1:10m is used instead for Tuvalu and Gibraltar (absent
 from 50m) and for Pitcairn and Turks and Caicos (50m leaves out the islands
 their capitals are on). Each country's pieces are merged with `mergeArcs`,
 so nothing folded into a country draws a border through it.
+
+The globe draws its coastline as the arcs only one country uses, so every land
+border has to come out as one arc both sides share. Natural Earth does not
+always put a vertex on both sides of a junction: Algeria's straight border has
+no point where Morocco and Western Sahara meet across it, so the two sides used
+to become separate one-country arcs and the globe drew 26 km of border as
+coast, a white tick in the Sahara. Before encoding, the build therefore inserts
+any vertex of another piece that lies on a segment (within one unit of the
+1e5 grid topojson quantises to) into that segment. Today that adds 9 points:
+Algeria's junction, Macau–China, Gibraltar–Spain, and a vertex one grid unit
+off the other side's line on China–Mongolia, Croatia–Serbia and
+Ethiopia–South Sudan. No drawn area moves by more than 1 km².
 
 ## Choices that differ from Natural Earth
 
@@ -112,6 +160,28 @@ Natural Earth's defaults are used except where the game needs otherwise:
 
 ## Catalog choices
 
+- **Difficulty** (`difficulty`, 1–5) is a hand judgement in `DIFFICULTY` in
+  `lib/catalog.mjs`. It rates how readily a typical player (English-speaking,
+  US-based) thinks of a country and finds it on a blind globe. That is recall
+  and placement, not size or population alone:
+
+  | Tier | Meaning | Examples | Answers |
+  | --- | --- | --- | --- |
+  | 1 | household names anyone can point to | USA, China, France, Egypt | 30 |
+  | 2 | well known, and most adults can place them | Netherlands, Iran, Kenya | 40 |
+  | 3 | familiar names in a busier part of the map | Hungary, Oman, Ghana | 45 |
+  | 4 | heard of but rarely guessed | the Balkans, Baltics, Caucasus, Central Asia, West Africa, Central America | 45 |
+  | 5 | obscure | microstates, small island nations, Eswatini, Djibouti, Bhutan, Timor-Leste | 37 |
+
+  Hard mode draws its answers by tier, with tickets per tier set in
+  `globle.hard-weights` (default 0/1/3/6/8). Tier 1 is never drawn.
+  `npm run check` prints the share of a single draw each tier gets, which is
+  what Hard practice sees. It also prints the Hard daily's long-run mix: the
+  daily skips its own answers from the last 55 days, mostly tier 4 and 5, which
+  flattens it to about 8% / 23% / 35% / 34% for tiers 2–5. Territories are
+  never the answer and are written out as 5. The build fails unless every answer is in
+  exactly one tier.
+
 - **Regions** follow UN M49, except Russia → europe and Cyprus → europe.
   Turkey, the Caucasus and Kazakhstan are asia; Egypt is africa; Greenland is
   americas; French Southern Lands and the British Indian Ocean Territory are
@@ -137,14 +207,28 @@ Natural Earth's defaults are used except where the game needs otherwise:
 
 Contract shape and field order of every entry; codes identical across all three
 files; 197 answers, each with a region and a capital; names and aliases
-unambiguous; matrix square, symmetric, integer, zero diagonal; known distances
+unambiguous, also under the client's matcher (match.js findExact), which Hard
+relies on because it has no dropdown; every answer has a difficulty of 1–5 and every territory 5;
+each tier holds 20–55 answers; the owner's examples are at the right end of
+the scale (tier 1: USA, China, Russia, Brazil, India, Australia, Canada,
+France, Germany, UK, Japan, Italy, Spain, Mexico, Egypt; tier 5:
+microstates, Tonga, Tuvalu, Nauru, Saint Kitts and Nevis, Eswatini,
+Lesotho, Djibouti, Comoros, São Tomé, Equatorial Guinea, Guinea-Bissau,
+Bhutan, Brunei, Timor-Leste); the small island nations are exactly the
+expected 31; Japan, the UK, Ireland, Iceland, Cuba, New Zealand,
+Madagascar, Sri Lanka, the Philippines, Indonesia, Taiwan, Haiti, the
+Dominican Republic, Papua New Guinea, Timor-Leste, Brunei, Australia and
+the mainland microstates stay in the mainland pool; no small island nation
+has a land border with an answer or a drawn shape over 30,000 km²; matrix square, symmetric, integer, zero diagonal; known distances
 (France–Spain 0, Italy–Vatican 0, Somalia–Djibouti 0, France–Brazil > 3,000,
 UK–France 20–60, Spain–Morocco 5–30, Russia–USA 0–100, Iceland–Greenland
 200–400, Norway–South Africa 8,500–10,000, …); every pair that includes an
 answer within max(150 km, 15%) of the gap between the two drawn shapes, so no
 colour contradicts the globe (the slack covers 10m and 50m drawing land
 borders differently); every drawn shape has
-positive, less-than-hemisphere area after quantisation; world.json under 1.25 MB;
+positive, less-than-hemisphere area after quantisation; no border drawn as
+coast (no two one-country arcs within a grid unit of each other for more than
+half a unit); world.json under 1.25 MB;
 every capital inside or within 50 km of its country, every label point within
 25 km; well-known capitals at the right coordinates; label points for
 antimeridian and multi-island countries on the main landmass.
@@ -153,6 +237,11 @@ Australia–New Zealand is checked at 550–700 km, not the 1,300–2,300 km of 
 Tasman Sea: Macquarie Island (Australia) is ~620 km from the Auckland Islands
 (New Zealand), both drawn on the globe, and the rule is the minimum over all
 territory.
+
+It also prints the answers per tier, the share of a single Hard draw each
+tier gets under the default weights, the Hard daily's tier mix over 100,000
+simulated days (same weights, its 55-day no-repeat window, never the day's
+classic answer, fixed seed), and the size of the mainland pool.
 
 The world-countries cross-check prints notes, not failures. Expected ones:
 Kosovo's borders (world-countries files it as `UNK`, not `XKX`); Spain–Morocco (Ceuta

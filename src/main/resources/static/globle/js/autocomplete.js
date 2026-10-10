@@ -4,6 +4,9 @@
 // a guess itself: it calls onPick(code) and the game decides what happens. Already
 // guessed places stay in the list, marked, so typing one gives a clear "you
 // already tried that" instead of silently showing nothing.
+//
+// Hard mode has no suggestions at all: setEnabled(false) takes the listbox out of
+// the page and strips the combobox roles, leaving a plain text input.
 
 import { search, findExact } from "./match.js";
 import { flagEmoji } from "./format.js";
@@ -30,20 +33,21 @@ export class Autocomplete {
         this.active = -1;
         this.idBase = `gl-opt-${++uid}`;
         this.locked = false;
+        this.enabled = false;
+        this.home = listbox.parentNode;
 
-        input.setAttribute("role", "combobox");
-        input.setAttribute("aria-autocomplete", "list");
-        input.setAttribute("aria-expanded", "false");
-        input.setAttribute("aria-controls", listbox.id);
         listbox.setAttribute("role", "listbox");
+        this.setEnabled(true);
 
         input.addEventListener("input", () => {
             this.onType();
-            this.update();
+            if (this.enabled) this.update();
         });
-        input.addEventListener("keydown", (e) => this.onKey(e));
+        input.addEventListener("keydown", (e) => {
+            if (this.enabled) this.onKey(e);
+        });
         input.addEventListener("focus", () => {
-            if (this.input.value.trim()) this.update();
+            if (this.enabled && this.input.value.trim()) this.update();
         });
         // Clicking an option must not blur the input first, or the list closes
         // under the pointer and the click lands on whatever was behind it.
@@ -57,6 +61,32 @@ export class Autocomplete {
             if (result) this.choose(result);
         });
         input.addEventListener("blur", () => this.close());
+    }
+
+    /**
+     * On: a combobox with suggestions. Off: a plain text box. The listbox leaves the
+     * document, so nothing can pop up and nothing announces one.
+     */
+    setEnabled(on) {
+        on = !!on;
+        if (on === this.enabled) return;
+        this.enabled = on;
+        const input = this.input;
+        if (on) {
+            if (!this.listbox.isConnected && this.home) this.home.append(this.listbox);
+            input.setAttribute("role", "combobox");
+            input.setAttribute("aria-autocomplete", "list");
+            input.setAttribute("aria-expanded", "false");
+            input.setAttribute("aria-controls", this.listbox.id);
+        } else {
+            this.close();
+            this.results = [];
+            this.listbox.replaceChildren();
+            this.listbox.remove();
+            for (const name of ["role", "aria-autocomplete", "aria-expanded", "aria-controls", "aria-activedescendant"]) {
+                input.removeAttribute(name);
+            }
+        }
     }
 
     /** Swap the search index (switching between countries and capitals). */
@@ -85,11 +115,11 @@ export class Autocomplete {
     }
 
     isOpen() {
-        return this.input.getAttribute("aria-expanded") === "true";
+        return this.enabled && this.input.getAttribute("aria-expanded") === "true";
     }
 
     update() {
-        if (this.locked) return;
+        if (this.locked || !this.enabled) return;
         this.results = search(this.index, this.input.value, { limit: 8, guessed: this.guessed });
         this.active = -1;
         this.render();
@@ -160,7 +190,7 @@ export class Autocomplete {
 
     close() {
         this.listbox.hidden = true;
-        this.input.setAttribute("aria-expanded", "false");
+        if (this.enabled) this.input.setAttribute("aria-expanded", "false");
         this.input.removeAttribute("aria-activedescendant");
         this.active = -1;
     }

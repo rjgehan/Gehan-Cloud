@@ -6,7 +6,8 @@
 
 const KM_PER_MILE = 1.609344;
 
-export const REGIONS = ["world", "africa", "americas", "asia", "europe", "oceania"];
+/** Every region a practice game can be limited to. "mainland" is the world without small island nations. */
+export const REGIONS = ["world", "africa", "americas", "asia", "europe", "oceania", "mainland"];
 
 const REGION_LABELS = {
     world: "World",
@@ -15,6 +16,7 @@ const REGION_LABELS = {
     asia: "Asia",
     europe: "Europe",
     oceania: "Oceania",
+    mainland: "Mainland",
     antarctica: "Antarctica",
 };
 

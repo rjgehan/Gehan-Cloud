@@ -5,6 +5,9 @@ import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Collections;
+import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Every setting Globle has, each with a working default, so the game needs no line in
@@ -34,9 +37,10 @@ public class GlobleProperties {
     private LocalDate epoch = LocalDate.of(2026, 10, 9);
 
     /**
-     * A daily answer is not reused within this many days on either side. Values above a
-     * third of the possible answers (65) are treated as 65, so that the day's pool stays
-     * large enough not to give the answer away; see DailyPuzzles.
+     * A daily answer is not reused within this many days on either side, per daily. Each
+     * daily caps it at a third of its own pool (65 classic, 55 Hard with the default
+     * weights), so that the day's pool stays large enough not to give the answer away;
+     * see DailyPuzzles.
      */
     private int answerRepeatWindowDays = 60;
 
@@ -46,6 +50,27 @@ public class GlobleProperties {
      * if that ever stops being true, not a rule of the game.
      */
     private int maxGuesses = 400;
+
+    /**
+     * How strongly Hard's draw favours each difficulty tier (1 = everyone could find it,
+     * 5 = obscure): a tier-5 country at 8 is eight times as likely as a tier-2 one at 1,
+     * and a tier at 0 is never drawn. By default tier 1 is left out entirely and about
+     * three in four of a single draw are tier 4 or 5 (about seven in ten Hard dailies,
+     * after the no-repeat window). Set one tier with e.g.
+     * {@code globle.hard-weights.1=1}; the others keep their defaults. Read by
+     * AnswerPools.
+     */
+    private Map<Integer, Integer> hardWeights = defaultHardWeights();
+
+    private static Map<Integer, Integer> defaultHardWeights() {
+        Map<Integer, Integer> weights = new TreeMap<>();
+        weights.put(1, 0);
+        weights.put(2, 1);
+        weights.put(3, 3);
+        weights.put(4, 6);
+        weights.put(5, 8);
+        return weights;
+    }
 
     public boolean isEnabled() {
         return enabled;
@@ -97,5 +122,39 @@ public class GlobleProperties {
             throw new IllegalArgumentException("globle.max-guesses must be at least 1");
         }
         this.maxGuesses = maxGuesses;
+    }
+
+    /** Tier to weight, tiers 1 to 5. Read-only; a tier missing from it weighs 0. */
+    public Map<Integer, Integer> getHardWeights() {
+        return Collections.unmodifiableMap(hardWeights);
+    }
+
+    /** Weight of one difficulty tier in Hard's draw; 0 means never drawn. */
+    public int hardWeight(int difficulty) {
+        return hardWeights.getOrDefault(difficulty, 0);
+    }
+
+    /**
+     * Spring merges what is configured into the defaults before calling this, so a
+     * property for one tier leaves the rest as they were.
+     */
+    public void setHardWeights(Map<Integer, Integer> hardWeights) {
+        if (hardWeights == null) {
+            throw new IllegalArgumentException("globle.hard-weights must map tiers 1-5 to weights");
+        }
+        Map<Integer, Integer> checked = new TreeMap<>();
+        hardWeights.forEach((tier, weight) -> {
+            if (tier == null || tier < 1 || tier > 5) {
+                throw new IllegalArgumentException("globle.hard-weights: tiers are 1 to 5, not " + tier);
+            }
+            if (weight == null || weight < 0 || weight > 1000) {
+                throw new IllegalArgumentException("globle.hard-weights." + tier + " must be from 0 to 1000");
+            }
+            checked.put(tier, weight);
+        });
+        if (checked.values().stream().noneMatch(weight -> weight > 0)) {
+            throw new IllegalArgumentException("globle.hard-weights needs at least one tier above 0");
+        }
+        this.hardWeights = checked;
     }
 }

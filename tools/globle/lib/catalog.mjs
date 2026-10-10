@@ -1,7 +1,8 @@
 // The hand-curated half of the data: what each country is called, which names
-// people actually type for it, which region it belongs to, and where its capital
-// is. Geometry comes from Natural Earth; everything here is plain facts written
-// out by hand so the generated files carry no third-party database licence.
+// people actually type for it, which region it belongs to, where its capital
+// is, and how hard it is to guess (DIFFICULTY). Geometry comes from Natural
+// Earth; everything here is plain facts and judgement written out by hand, so
+// the generated files carry no third-party database licence.
 //
 // One entry per code that appears in the generated files. build-data.mjs fails
 // if a feature resolves to a code with no entry here, or if an entry here has no
@@ -52,6 +53,62 @@ export const UN_MEMBERS = `
 
 /** Answerable on top of the UN members: two observer states and two widely recognised states. */
 export const EXTRA_ANSWERS = ['VAT', 'PSE', 'TWN', 'XKX'];
+
+const list = (s) => s.trim().split(/\s+/);
+
+/**
+ * How hard each answer country is, 1..5. The question is how readily a typical
+ * player (English-speaking, US-based) thinks of the country and then finds it
+ * on a blind globe. That depends on recall and placement, not on size or
+ * population alone. Hard mode draws its answers by these tiers (tier 1 never,
+ * mostly 4 and 5; see globle.hard-weights).
+ *   1  household names anyone can point to: USA, China, France, Egypt
+ *   2  well known, and most adults can place them: Netherlands, Iran, Kenya
+ *   3  familiar names in a busier part of the map: Hungary, Oman, Ghana
+ *   4  heard of but rarely guessed: the Balkans, Baltics, Caucasus, Central
+ *      Asia, West Africa, Central America, the larger island nations
+ *   5  obscure: microstates, small island nations, and the least-known small
+ *      countries (Eswatini, Djibouti, Bhutan, Timor-Leste)
+ * One line per region: Americas, Europe, Asia, Africa, Oceania. Every answer
+ * appears exactly once (build-data.mjs enforces it). Territories are never
+ * the answer and are written out as 5.
+ */
+export const DIFFICULTY = {
+  1: list(`
+    USA CAN MEX BRA ARG CHL PER CUB
+    GBR IRL FRA DEU ITA ESP PRT GRC NOR SWE RUS UKR
+    CHN IND JPN KOR SAU TUR
+    EGY ZAF
+    AUS NZL
+  `),
+  2: list(`
+    COL VEN ECU BOL URY PAN JAM
+    NLD BEL CHE AUT POL DNK FIN ISL
+    ISR IRN IRQ AFG PAK THA VNM IDN PHL MNG PRK TWN KAZ SYR NPL ARE
+    MAR NGA KEN ETH MDG DZA LBY SOM COD
+  `),
+  3: list(`
+    PRY HTI DOM CRI GTM HND NIC
+    CZE HUN ROU BGR HRV SRB BLR SVK ALB
+    MYS MMR BGD LKA YEM OMN JOR LBN SGP KHM KWT QAT
+    SDN TUN GHA TZA AGO NAM ZWE UGA MLI NER TCD MOZ ZMB SEN CMR SSD
+    PNG
+  `),
+  4: list(`
+    SLV BLZ GUY SUR BHS TTO BRB
+    SVN BIH MKD MNE MDA EST LVA LTU LUX CYP MLT
+    PSE LAO ARM AZE KGZ TJK TKM UZB GEO
+    BWA CIV MRT CAF COG GAB BFA BEN TGO GIN SLE LBR MWI ERI RWA
+    FJI SLB VUT
+  `),
+  5: list(`
+    ATG DMA GRD KNA LCA VCT
+    AND LIE MCO SMR VAT XKX
+    BTN BRN TLS MDV BHR
+    DJI GNQ GNB LSO SWZ STP COM CPV SYC MUS BDI GMB
+    KIR MHL FSM NRU PLW TUV WSM TON
+  `),
+};
 
 export const CATALOG = {
   // ---------------------------------------------------------------- Africa

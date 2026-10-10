@@ -3,12 +3,19 @@
 // Canvas rather than SVG because the whole world is redrawn on every frame of a
 // drag, and a few hundred country paths as DOM nodes is what makes an SVG globe
 // stutter on a phone. Frames are only drawn while something is moving (a drag,
-// inertia, a fly-to, a pulse, or the idle spin for its first 30 s while no dialog
-// is open); a still globe costs nothing.
+// inertia, a fly-to, a pulse, or the idle spin for its first 30 s while the globe
+// is on screen and no dialog is open); a still globe costs nothing.
 //
 // The globe knows geometry and nothing about the game: main.js hands it a view
 // (which countries are guessed, in what colour, whether the answer is showing)
 // and it draws that. It reports hovers and taps back as country codes.
+//
+// Two looks. The map: all land as one merged shape with only its coastline drawn,
+// so no political border gives a country away before it is guessed. Blind (Hard
+// mode): sea and a faint graticule only while the game is played; when it ends
+// the merged land fades in, still with no borders, so the answer has a place on
+// the map. In both, a guessed country is a fill in its own colour, never outlined
+// in a contrasting one.
 //
 // d3 and topojson-client are classic UMD scripts loaded before the modules, so
 // they are read off window here rather than imported.
@@ -25,7 +32,8 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 14;
 const SPIN_DEG_PER_MS = 0.005;     // one turn every ~70 s: alive, not busy
 // The idle spin redraws the whole globe every frame, which keeps a phone's main
-// thread busy. It stops after this long, and pauses while a dialog is open.
+// thread busy. It stops after this long, and pauses while a dialog is open or the
+// globe is scrolled out of view.
 const IDLE_SPIN_MS = 30000;
 const INERTIA_MS = 330;            // velocity half-life-ish after a fling
 const TINY_AREA_PX = 60;           // smaller than this on screen gets a marker dot
@@ -41,11 +49,17 @@ const LABEL_FONT = "600 12px Poppins, system-ui, -apple-system, sans-serif";
 const OCEAN_LIGHT = "#1d4d7d";
 const OCEAN_DARK = "#071d36";
 const GRATICULE = "rgba(255, 255, 255, 0.07)";
+const GRATICULE_BLIND = "rgba(255, 255, 255, 0.1)";
 const LAND = "#4b5d55";
-const LAND_DIM = "#2c3833";
-const BORDER = "rgba(6, 14, 20, 0.6)";
-const GUESS_STROKE = "rgba(255, 255, 255, 0.6)";
+const COAST = "rgba(196, 226, 214, 0.42)";
+// Just enough to close the anti-aliasing seam where two guessed neighbours meet;
+// drawn in the country's own colour, so it never reads as a border.
+const HAIRLINE = 0.5;
 const RIM = "rgba(160, 205, 255, 0.28)";
+// Blind, once the game is over: the land under the guesses and the answer, faint
+// enough that they stay what the eye goes to.
+const BLIND_REVEAL_ALPHA = 0.6;
+const BLIND_REVEAL_MS = 700;
 const REVEAL_STROKE = "#86efac";
 
 /** Where to look, and how close, when a regional game starts. */
@@ -56,6 +70,7 @@ const REGION_VIEWS = {
     asia: { centre: [92, 30], zoom: 1.35 },
     europe: { centre: [14, 52], zoom: 2.3 },
     oceania: { centre: [150, -18], zoom: 1.6 },
+    mainland: { centre: [10, 22], zoom: 1 },
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -88,7 +103,6 @@ export class Globe {
         this.topology = null;
         this.features = new Map();
         this.centres = new Map();
-        this.regionOf = new Map();
         this.geometries = new Map();
         this.areas = new Map();
         this.levels = [];
@@ -99,6 +113,8 @@ export class Globe {
         this.spinWanted = true;
         this.spinMs = 0;              // idle spin so far, toward IDLE_SPIN_MS
         this.interacted = false;
+        this.onScreen = true;         // false while the canvas is scrolled out of view
+        this.revealStart = 0;         // when a blind game ended, for the land's fade-in
 
         this.fly = null;
         this.inertia = null;
@@ -115,19 +131,25 @@ export class Globe {
         this.bindEvents();
         this.resizeObserver = new ResizeObserver(() => this.resize());
         this.resizeObserver.observe(canvas.parentElement || canvas);
+        if (typeof IntersectionObserver === "function") {
+            this.visibility = new IntersectionObserver((entries) => {
+                this.onScreen = entries[entries.length - 1].isIntersecting;
+                if (this.onScreen) this.requestDraw();
+            });
+            this.visibility.observe(canvas);
+        }
         this.resize();
     }
 
     // ------------------------------------------------------------------ data
 
-    /** Loads the TopoJSON world. regionOf maps code -> region for regional games. */
-    setWorld(topology, regionOf) {
+    /** Loads the TopoJSON world. */
+    setWorld(topology) {
         const object = topology && topology.objects && topology.objects.countries;
         if (!object) {
             throw new Error("world.json has no countries object");
         }
         this.topology = topology;
-        this.regionOf = regionOf || new Map();
         this.features.clear();
         this.centres.clear();
         this.areas.clear();
@@ -195,13 +217,14 @@ export class Globe {
     /**
      * What to draw.
      *   kind        "country" | "capital"
-     *   region      dims land outside it in a regional game
+     *   region      the region played (the camera starts there)
      *   guesses     [{ code, color, capital: { name, lat, lng } | null }]
      *   latestCode  the newest guess, drawn a little larger in capitals mode
      *   answer      { code, name, lat, lng, capital } once the game is over, else null
      *   status      "PLAYING" | "WON" | "GAVE_UP"
      */
     setGame(view) {
+        const wasOver = this.view.status !== "PLAYING" && !!this.view.answer;
         this.view = {
             kind: view.kind || "country",
             region: view.region || "world",
@@ -215,12 +238,27 @@ export class Globe {
         const want = this.view.guesses.length === 0 && this.view.status === "PLAYING";
         if (want && !this.spinWanted) this.spinMs = 0;
         this.spinWanted = want;
+        // A game that has just ended: a blind globe fades its land in from now.
+        const over = this.view.status !== "PLAYING" && !!this.view.answer;
+        if (over && !wasOver) this.revealStart = performance.now();
         this.requestDraw();
     }
 
     /** Blind: only the sea and what you have guessed. */
     setBlind(on) {
-        this.blind = !!on;
+        on = !!on;
+        if (on === this.blind) return;
+        this.blind = on;
+        this.requestDraw();
+    }
+
+    /**
+     * Lets the idle spin run again from the start, as if nobody had touched the
+     * globe: the home screen's slow turn. It still stops after IDLE_SPIN_MS.
+     */
+    restartSpin() {
+        this.interacted = false;
+        this.spinMs = 0;
         this.requestDraw();
     }
 
@@ -230,12 +268,13 @@ export class Globe {
         const budget = moving ? LOD_ERROR_MOVING_PX : LOD_ERROR_STILL_PX;
         const level = this.levels.find((l) => l.tol * pxPerDegree <= budget) || this.levels[this.levels.length - 1];
         if (!level.land) {
-            // One merged land shape and one border mesh draw far faster than ~250
-            // separate country fills, and nothing about unguessed land needs them apart.
+            // One merged land shape and one coastline draw far faster than ~250
+            // separate country fills, and show no border between countries. Computed
+            // once per level of detail. The coastline is every arc only one country
+            // uses: an arc two countries share is a border, and is left out.
             const object = level.topology.objects.countries;
             level.land = withoutInverted(topojson.merge(level.topology, object.geometries));
-            level.borders = topojson.mesh(level.topology, object, (a, b) => a !== b);
-            level.regions = new Map();
+            level.coast = topojson.mesh(level.topology, object, (a, b) => a === b);
         }
         return level;
     }
@@ -254,20 +293,6 @@ export class Globe {
             level.features.set(code, (thin && withoutInvertedFeature(thin)) || full);
         }
         return level.features.get(code);
-    }
-
-    /** Land inside and outside a region, for dimming the rest of the world in a regional game. */
-    regionShapes(level, region) {
-        if (!level.regions.has(region)) {
-            const geometries = level.topology.objects.countries.geometries;
-            const inRegion = (g) => this.regionOf.get(String(g.id)) === region;
-            const inside = geometries.filter(inRegion);
-            level.regions.set(region, inside.length === 0 ? null : {
-                inside: withoutInverted(topojson.merge(level.topology, inside)),
-                outside: withoutInverted(topojson.merge(level.topology, geometries.filter((g) => !inRegion(g)))),
-            });
-        }
-        return level.regions.get(region);
     }
 
     /** Solid angle of a country in steradians, cached: area on screen is this times r squared. */
@@ -369,8 +394,23 @@ export class Globe {
     shouldSpin() {
         return this.spinWanted && !this.interacted && !this.reducedMotion && !this.fly && !this.inertia
             && this.spinMs < IDLE_SPIN_MS
-            // Nobody is watching it behind a modal sheet.
+            // Nobody is watching it behind a modal sheet, or scrolled out of view.
+            && this.onScreen
             && !document.querySelector("dialog[open]");
+    }
+
+    /** How much of the land a blind globe shows: none in play, fading in once the game is over. */
+    blindLandAlpha(now) {
+        const view = this.view;
+        if (view.status === "PLAYING" || !view.answer) return 0;
+        if (this.reducedMotion || !this.revealStart) return BLIND_REVEAL_ALPHA;
+        return BLIND_REVEAL_ALPHA * clamp((now - this.revealStart) / BLIND_REVEAL_MS, 0, 1);
+    }
+
+    /** Whether a blind globe's land is still fading in, and so needs more frames. */
+    isRevealing(now) {
+        return this.blind && !this.reducedMotion && this.revealStart > 0
+            && this.view.status !== "PLAYING" && now - this.revealStart < BLIND_REVEAL_MS;
     }
 
     frame(now) {
@@ -393,7 +433,8 @@ export class Globe {
 
         this.draw(now);
 
-        if (this.fly || this.inertia || this.shouldSpin() || this.pulses.length || this.lastDrawMoving) {
+        if (this.fly || this.inertia || this.shouldSpin() || this.pulses.length || this.lastDrawMoving
+                || this.isRevealing(now)) {
             // The last case is one more frame once motion stops, at full detail.
             this.requestDraw();
         } else {
@@ -514,33 +555,29 @@ export class Globe {
 
         ctx.beginPath();
         path(this.graticule);
-        ctx.strokeStyle = GRATICULE;
+        ctx.strokeStyle = this.blind ? GRATICULE_BLIND : GRATICULE;
         ctx.lineWidth = 0.6;
         ctx.stroke();
 
         const level = this.levels.length ? this.levelFor(moving) : null;
-        if (!this.blind && level) {
-            const regional = view.region !== "world" ? this.regionShapes(level, view.region) : null;
-            if (regional) {
-                ctx.beginPath();
-                path(regional.outside);
-                ctx.fillStyle = LAND_DIM;
-                ctx.fill();
-                ctx.beginPath();
-                path(regional.inside);
-                ctx.fillStyle = LAND;
-                ctx.fill();
-            } else {
-                ctx.beginPath();
-                path(level.land);
-                ctx.fillStyle = LAND;
-                ctx.fill();
-            }
+        // Blind hides the land only while the game is played. Once the answer is
+        // out it adds nothing, and an obscure answer needs the map around it.
+        const landAlpha = this.blind ? this.blindLandAlpha(now) : 1;
+        if (landAlpha > 0 && level) {
+            // One shade for all land, regional games included: dimming the land
+            // outside a region would draw that region's political edge across it.
+            // Merged land and coastline only, never borders, in either look.
+            ctx.globalAlpha = landAlpha;
             ctx.beginPath();
-            path(level.borders);
-            ctx.strokeStyle = BORDER;
-            ctx.lineWidth = 0.6;
+            path(level.land);
+            ctx.fillStyle = LAND;
+            ctx.fill();
+            ctx.beginPath();
+            path(level.coast);
+            ctx.strokeStyle = COAST;
+            ctx.lineWidth = 0.7;
             ctx.stroke();
+            ctx.globalAlpha = 1;
         }
 
         // Guessed countries. In capitals mode the country is only tinted: the dot
@@ -549,12 +586,13 @@ export class Globe {
             if (g.code === answerCode || !level) continue;
             const feature = this.featureAt(level, g.code);
             if (!feature) continue;
+            const fill = capitals ? withAlpha(g.color, 0.38) : g.color;
             ctx.beginPath();
             path(feature);
-            ctx.fillStyle = capitals ? withAlpha(g.color, 0.38) : g.color;
+            ctx.fillStyle = fill;
             ctx.fill();
-            ctx.strokeStyle = capitals ? withAlpha(g.color, 0.75) : GUESS_STROKE;
-            ctx.lineWidth = 0.8;
+            ctx.strokeStyle = fill;
+            ctx.lineWidth = HAIRLINE;
             ctx.stroke();
             if (!capitals) this.collectMarker(markers, g.code, feature, g.color, "guess");
         }
@@ -568,17 +606,20 @@ export class Globe {
                 ctx.beginPath();
                 path(feature);
                 if (won) {
-                    ctx.fillStyle = capitals ? withAlpha(ANSWER_COLOR, 0.5) : ANSWER_COLOR;
+                    const fill = capitals ? withAlpha(ANSWER_COLOR, 0.5) : ANSWER_COLOR;
+                    ctx.fillStyle = fill;
                     ctx.fill();
-                    ctx.strokeStyle = "#dcfce7";
-                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = fill;
+                    ctx.lineWidth = HAIRLINE;
                     ctx.stroke();
                 } else {
+                    // Hatched rather than solid, so a screenshot tells a give-up from a
+                    // win; the dashes are the hatch's own colour.
                     ctx.fillStyle = this.hatchPattern();
                     ctx.fill();
-                    ctx.setLineDash([4, 3]);
-                    ctx.strokeStyle = REVEAL_STROKE;
-                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([3, 3]);
+                    ctx.strokeStyle = withAlpha(REVEAL_STROKE, 0.7);
+                    ctx.lineWidth = 1;
                     ctx.stroke();
                     ctx.setLineDash([]);
                 }

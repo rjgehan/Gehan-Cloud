@@ -2,8 +2,10 @@ package cloud.gehan.globle;
 
 import cloud.gehan.globle.catalog.Country;
 import cloud.gehan.globle.catalog.CountryCatalog;
+import cloud.gehan.globle.model.Variant;
 import cloud.gehan.globle.repository.GlobleDayRepository;
 import cloud.gehan.globle.repository.GlobleGameRepository;
+import cloud.gehan.globle.repository.GlobleHardDayRepository;
 import cloud.gehan.globle.service.DailyPuzzles;
 import cloud.gehan.repository.UserRepository;
 import cloud.gehan.service.UserService;
@@ -17,6 +19,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
@@ -79,15 +82,22 @@ public abstract class GlobleTestBase {
     protected GlobleDayRepository days;
 
     @Autowired
+    protected GlobleHardDayRepository hardDays;
+
+    @Autowired
     protected DailyPuzzles puzzles;
 
     @Autowired
     protected CountryCatalog catalog;
 
+    @Autowired
+    protected JdbcTemplate jdbc;
+
     @BeforeEach
     void resetGloble() {
         games.deleteAll();
         days.deleteAll();
+        hardDays.deleteAll();
         users.deleteAll();
         clock.setDay(DAY_ONE);
     }
@@ -130,12 +140,34 @@ public abstract class GlobleTestBase {
         return postOk("/globle/api/daily/guess", Map.of("code", code), who);
     }
 
+    protected JsonNode guessDaily(RequestPostProcessor who, String code, Variant variant) throws Exception {
+        return postOk("/globle/api/daily/guess", Map.of("code", code, "variant", variant.api()), who);
+    }
+
     protected JsonNode giveUpDaily(RequestPostProcessor who) throws Exception {
         return postOk("/globle/api/daily/give-up", null, who);
     }
 
+    protected JsonNode giveUpDaily(RequestPostProcessor who, Variant variant) throws Exception {
+        return postOk("/globle/api/daily/give-up", Map.of("variant", variant.api()), who);
+    }
+
+    protected JsonNode daily(RequestPostProcessor who, Variant variant) throws Exception {
+        return getOk("/globle/api/daily?variant=" + variant.api(), who);
+    }
+
     protected JsonNode newGame(RequestPostProcessor who, String kind, String region) throws Exception {
         return postOk("/globle/api/unlimited/new", Map.of("kind", kind, "region", region), who);
+    }
+
+    protected JsonNode newGame(RequestPostProcessor who, String kind, String region, Variant variant)
+            throws Exception {
+        return postOk("/globle/api/unlimited/new",
+                Map.of("kind", kind, "region", region, "variant", variant.api()), who);
+    }
+
+    protected JsonNode home(RequestPostProcessor who) throws Exception {
+        return getOk("/globle/api/home", who);
     }
 
     protected JsonNode guessUnlimited(RequestPostProcessor who, long id, String code) throws Exception {
@@ -146,10 +178,26 @@ public abstract class GlobleTestBase {
         return getOk("/globle/api/leaderboard", who);
     }
 
+    protected JsonNode board(RequestPostProcessor who, Variant variant) throws Exception {
+        return getOk("/globle/api/leaderboard?variant=" + variant.api(), who);
+    }
+
+    /**
+     * Makes every stored game look as it did before Hard existed: no variant. That is
+     * how the rows already in production read after the column is added.
+     */
+    protected void forgetVariants() {
+        jdbc.update("update globle_game set variant = null");
+    }
+
     // ------------------------------------------------------------------ answers
 
     protected String answerToday() {
         return puzzles.answerFor(clock.instant().atZone(MovableClock.PUZZLE_ZONE).toLocalDate());
+    }
+
+    protected String answerToday(Variant variant) {
+        return puzzles.answerFor(variant, clock.instant().atZone(MovableClock.PUZZLE_ZONE).toLocalDate());
     }
 
     /** The stored answer of an unlimited game, which the API never shows mid-game. */
@@ -187,5 +235,19 @@ public abstract class GlobleTestBase {
             guessDaily(who, wrong);
         }
         return guessDaily(who, answer);
+    }
+
+    /** Wins today's daily of one variant in exactly {@code guesses} guesses. */
+    protected JsonNode winDailyIn(RequestPostProcessor who, int guesses, Variant variant) throws Exception {
+        String answer = answerToday(variant);
+        for (String wrong : wrongGuesses(answer, guesses - 1)) {
+            guessDaily(who, wrong, variant);
+        }
+        return guessDaily(who, answer, variant);
+    }
+
+    /** The player's database id, for building {@code Player}s and rows by hand. */
+    protected long idOf(String username) {
+        return users.findByUsername(username).orElseThrow().getId();
     }
 }

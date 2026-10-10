@@ -12,6 +12,7 @@ const PER_LINE = 8;
 /** A globe that faces the region played; daily keeps the Americas one it always had. */
 const GLOBES = {
     world: "\u{1F30E}",
+    mainland: "\u{1F30E}",
     americas: "\u{1F30E}",
     europe: "\u{1F30D}",
     africa: "\u{1F30D}",
@@ -25,24 +26,37 @@ export function shareSquares(state) {
     return inGuessOrder(state && state.guesses).map((g) => squareFor(g.km, answer !== null && g.code === answer));
 }
 
+/** A missing variant is classic: games from before Hard existed. */
+function isHard(state) {
+    return !!state && state.variant === "hard";
+}
+
 /** The first line: which game this was. */
 export function shareTitle(state) {
     if (!state || state.mode === "daily") {
         const puzzle = state && state.puzzle != null ? ` #${state.puzzle}` : "";
+        if (isHard(state)) return `\u{1F30E} Globle Hard${puzzle} \u{1F30E}`;
         return `\u{1F30E} Globle (Gehan)${puzzle} \u{1F30E}`;
     }
-    const region = regionLabel(state.region || "world");
+    const regionCode = state.region || "world";
+    const region = regionLabel(regionCode);
+    const globe = GLOBES[regionCode] || GLOBES.world;
+    if (isHard(state)) {
+        return regionCode === "world"
+            ? `${globe} Globle Hard Practice ${globe}`
+            : `${globe} Globle Hard Practice (${region}) ${globe}`;
+    }
     if (state.kind === "capital") {
         return `\u{1F3DB}️ Globle Capitals (${region}) \u{1F3DB}️`;
     }
-    const globe = GLOBES[state.region] || GLOBES.world;
     return `${globe} Globle Unlimited (${region}) ${globe}`;
 }
 
 /**
  * The whole share text.
  *
- *   streak  the viewer's current daily streak, shown only for a daily win
+ *   streak  the viewer's current streak for this daily (classic or hard), shown only
+ *           for a daily win
  *   site    where to play, without the scheme so chat apps do not unfurl a preview
  */
 export function shareText(state, { streak = 0, site = "gehan.cloud/globle" } = {}) {

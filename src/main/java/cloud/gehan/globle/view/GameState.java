@@ -10,7 +10,9 @@ import java.util.List;
  *                     addressed by date
  * @param mode         "daily" or "unlimited"
  * @param kind         "country" or "capital"; the daily is always country
- * @param region       "world", "africa", ...; the daily is always world
+ * @param region       "world", "africa", ..., "mainland"; the daily is always world
+ * @param variant      "classic" or "hard". Hard is a country game only. A game stored
+ *                     before Hard existed is classic.
  * @param puzzle       the daily's puzzle number, else null
  * @param date         the daily's date (yyyy-MM-dd), else null
  * @param status       PLAYING, WON or GAVE_UP
@@ -19,7 +21,8 @@ import java.util.List;
  * @param answer       null while PLAYING, always - this is the field that must never leak
  * @param nextPuzzleAt the daily only: the next local midnight, with its offset
  */
-public record GameState(Long id, String mode, String kind, String region, Integer puzzle, String date,
+public record GameState(Long id, String mode, String kind, String region, String variant, Integer puzzle,
+                        String date,
                         String status, List<Guess> guesses, int guessCount, Integer closestKm,
                         Answer answer, String nextPuzzleAt) {
 

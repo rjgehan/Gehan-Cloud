@@ -10,13 +10,19 @@ import java.util.Map;
  * client displays, so it never rounds a second time; sorting happens on the exact
  * values before rounding.
  *
+ * <p>A request names one daily variant, classic or Hard; they are separate puzzles
+ * with separate boards and streaks. Today, Week, All time and Me are that variant's.
+ * The practice boards are always all three.
+ *
+ * @param variant   "classic" or "hard": which daily the daily sections describe
  * @param today     today's daily, as a race
  * @param week      daily results over the last seven puzzle dates, today included
  * @param allTime   daily results ever
- * @param unlimited finished practice games, per kind
+ * @param unlimited finished practice games, per kind and variant
  * @param me        the viewer's own daily record
  */
-public record Leaderboard(Today today, List<WeekRow> week, List<AllTimeRow> allTime, Unlimited unlimited, Me me) {
+public record Leaderboard(String variant, Today today, List<WeekRow> week, List<AllTimeRow> allTime,
+                          Unlimited unlimited, Me me) {
 
     /**
      * @param viewerFinished whether the viewer has won or given up today
@@ -43,7 +49,12 @@ public record Leaderboard(Today today, List<WeekRow> week, List<AllTimeRow> allT
                              int currentStreak, int maxStreak, Integer best, boolean you) {
     }
 
-    public record Unlimited(List<UnlimitedRow> country, List<UnlimitedRow> capital) {
+    /**
+     * @param country classic country games of every region, Mainland included
+     * @param capital capital games
+     * @param hard    Hard practice games
+     */
+    public record Unlimited(List<UnlimitedRow> country, List<UnlimitedRow> capital, List<UnlimitedRow> hard) {
     }
 
     public record UnlimitedRow(String username, int played, int wins, Double avgGuesses, Integer best,

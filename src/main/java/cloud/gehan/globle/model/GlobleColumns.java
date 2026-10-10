@@ -102,4 +102,11 @@ public final class GlobleColumns {
             super(Status.class);
         }
     }
+
+    @Converter(autoApply = false)
+    public static class VariantName extends EnumName<Variant> {
+        public VariantName() {
+            super(Variant.class);
+        }
+    }
 }

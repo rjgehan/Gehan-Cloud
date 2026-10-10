@@ -7,6 +7,7 @@ import cloud.gehan.globle.model.Kind;
 import cloud.gehan.globle.model.Mode;
 import cloud.gehan.globle.model.Region;
 import cloud.gehan.globle.model.Status;
+import cloud.gehan.globle.model.Variant;
 import cloud.gehan.globle.view.GameState;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -41,8 +42,8 @@ public class GameViews {
     }
 
     /** Today's daily before the player has done anything: nothing stored, nothing to show. */
-    public GameState untouchedDaily(LocalDate date) {
-        return new GameState(null, Mode.DAILY.api(), Kind.COUNTRY.api(), Region.WORLD.api(),
+    public GameState untouchedDaily(LocalDate date, Variant variant) {
+        return new GameState(null, Mode.DAILY.api(), Kind.COUNTRY.api(), Region.WORLD.api(), variant.api(),
                 puzzles.puzzleNumber(date), date.toString(), Status.PLAYING.name(),
                 List.of(), 0, null, null, nextPuzzleAt(date));
     }
@@ -79,6 +80,7 @@ public class GameViews {
                 game.getMode().api(),
                 kind.api(),
                 game.getRegion().api(),
+                game.getVariant().api(),
                 daily ? puzzles.puzzleNumber(date) : null,
                 daily ? date.toString() : null,
                 game.getStatus().name(),
@@ -105,7 +107,8 @@ public class GameViews {
         return capital == null ? null : new GameState.Place(capital.name(), capital.lat(), capital.lng());
     }
 
-    private String nextPuzzleAt(LocalDate date) {
+    /** The midnight that ends {@code date}'s puzzles, as the client shows it. */
+    public String nextPuzzleAt(LocalDate date) {
         return clock.startOf(date.plusDays(1)).format(OFFSET_TIME);
     }
 }

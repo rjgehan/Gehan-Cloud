@@ -101,24 +101,42 @@ async function request(method, url, body, { cache = "no-store" } = {}) {
 
 const BASE = "/globle/api";
 
+/** "?a=1&b=2" from the defined values only. */
+function query(params) {
+    const parts = Object.entries(params)
+        .filter(([, v]) => v != null && v !== "")
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
+    return parts.length ? `?${parts.join("&")}` : "";
+}
+
+// variant is "classic" or "hard" everywhere it appears. The server reads a missing
+// one as classic, but the page always says which it means.
 export const api = {
     countries: () => request("GET", `${BASE}/countries`),
     // A static file, served no-cache with an ETag (GlobleStaticCaching): the
     // browser keeps it and revalidates, getting a 304 until a deploy changes it.
     world: () => request("GET", "/globle/world.json", undefined, { cache: "default" }),
 
-    daily: () => request("GET", `${BASE}/daily`),
+    /** The home screen: today's two dailies, streaks, and practice games in progress. */
+    home: () => request("GET", `${BASE}/home`),
+
+    daily: (variant) => request("GET", `${BASE}/daily${query({ variant })}`),
     // date is the puzzle the page is showing. The server refuses the request with
     // 409 "new-day" if midnight has passed since, rather than apply it to the new
     // day's puzzle.
-    guessDaily: (code, date) => request("POST", `${BASE}/daily/guess`, { code, date }),
-    giveUpDaily: (date) => request("POST", `${BASE}/daily/give-up`, { date }),
+    guessDaily: (code, date, variant) => request("POST", `${BASE}/daily/guess`, { code, date, variant }),
+    giveUpDaily: (date, variant) => request("POST", `${BASE}/daily/give-up`, { date, variant }),
 
-    /** The in-progress game of this kind, or null when there is none (204). */
-    current: (kind) => request("GET", `${BASE}/unlimited/current?kind=${encodeURIComponent(kind)}`),
-    newGame: (kind, region) => request("POST", `${BASE}/unlimited/new`, { kind, region }),
+    /**
+     * The in-progress practice game in one slot (kind, region, variant), or null when
+     * there is none (204). Without a region the server finds a game of that kind in
+     * any region, which is how a Capitals game started before presets resumes.
+     */
+    current: (kind, region, variant) => request("GET", `${BASE}/unlimited/current${query({ kind, region, variant })}`),
+    newGame: (kind, region, variant) => request("POST", `${BASE}/unlimited/new`, { kind, region, variant }),
     guessUnlimited: (id, code) => request("POST", `${BASE}/unlimited/${encodeURIComponent(id)}/guess`, { code }),
     giveUpUnlimited: (id) => request("POST", `${BASE}/unlimited/${encodeURIComponent(id)}/give-up`),
 
-    leaderboard: () => request("GET", `${BASE}/leaderboard`),
+    /** Today / Week / All time / me for one daily variant, plus every practice board. */
+    leaderboard: (variant) => request("GET", `${BASE}/leaderboard${query({ variant })}`),
 };

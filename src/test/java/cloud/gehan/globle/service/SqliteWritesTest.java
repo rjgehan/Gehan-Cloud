@@ -5,6 +5,7 @@ import cloud.gehan.globle.catalog.CountryCatalog;
 import cloud.gehan.globle.model.Kind;
 import cloud.gehan.globle.model.Player;
 import cloud.gehan.globle.model.Region;
+import cloud.gehan.globle.model.Variant;
 import cloud.gehan.repository.UserRepository;
 import cloud.gehan.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -81,14 +82,36 @@ class SqliteWritesTest {
     @Autowired
     private MovableClock clock;
 
+    @Autowired
+    private DailyPuzzles puzzles;
+
     /** Each round is a new day: everyone's first guess, and the day's answer drawn, at once. */
     @Test
     void everyoneStartingTheDailyAtOnceAllLand() throws Exception {
         List<Player> players = players("daily");
         for (int round = 0; round < 5; round++) {
             clock.setDay(LocalDate.of(2026, 10, 9).plusDays(round));
-            List<Throwable> failures = atOnce(players, player -> games.guessDaily(player, "FRA", null));
+            List<Throwable> failures = atOnce(players, player -> games.guessDaily(player, Variant.CLASSIC, "FRA", null));
             assertThat(failures).as("round %d", round).isEmpty();
+        }
+    }
+
+    /**
+     * Half the family opens classic and half opens Hard at the first moment of a day:
+     * both answers are drawn at once, Hard waiting on classic's, and every move lands.
+     */
+    @Test
+    void everyoneStartingBothDailiesAtOnceAllLand() throws Exception {
+        List<Player> players = players("both");
+        for (int round = 0; round < 5; round++) {
+            LocalDate date = LocalDate.of(2027, 1, 1).plusDays(round);
+            clock.setDay(date);
+            List<Throwable> failures = atOnce(players, player -> {
+                Variant variant = player.username().hashCode() % 2 == 0 ? Variant.HARD : Variant.CLASSIC;
+                return games.guessDaily(player, variant, "FRA", null);
+            });
+            assertThat(failures).as("round %d", round).isEmpty();
+            assertThat(puzzles.answerFor(Variant.HARD, date)).isNotEqualTo(puzzles.answerFor(date));
         }
     }
 
@@ -97,11 +120,11 @@ class SqliteWritesTest {
         List<Player> players = players("practice");
         List<String> codes = catalog.all().stream().map(c -> c.code()).toList();
         for (int round = 0; round < 10; round++) {
-            List<Throwable> started = atOnce(players, player -> games.newUnlimited(player, Kind.COUNTRY, Region.WORLD));
+            List<Throwable> started = atOnce(players, player -> games.newUnlimited(player, Kind.COUNTRY, Region.WORLD, Variant.CLASSIC));
             assertThat(started).as("starts in round %d", round).isEmpty();
             String code = codes.get(round);
             List<Throwable> guessed = atOnce(players, player -> {
-                long id = games.currentUnlimited(player, Kind.COUNTRY).orElseThrow().id();
+                long id = games.currentUnlimited(player, Kind.COUNTRY, null, Variant.CLASSIC).orElseThrow().id();
                 return games.guessUnlimited(player, id, code);
             });
             assertThat(guessed).as("guesses in round %d", round).isEmpty();

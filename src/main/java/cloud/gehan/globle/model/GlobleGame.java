@@ -37,7 +37,13 @@ import java.util.List;
  * old games too.
  *
  * <p>Daily rows do not store their answer; it lives once per date in
- * {@link GlobleDay}. Unlimited rows carry their own in {@code answerCode}.
+ * {@link GlobleDay} (classic) or {@link GlobleHardDay} (Hard). Unlimited rows carry
+ * their own in {@code answerCode}.
+ *
+ * <p><b>Rows from before Hard.</b> The table predates the {@code variant} column, and
+ * {@code ddl-auto=update} adds a column without filling it, so every row written
+ * before Hard existed has a null variant. They were all classic games, and
+ * {@link #getVariant()} reads null as exactly that. Nothing rewrites those rows.
  */
 @Entity
 @Table(name = "globle_game",
@@ -71,14 +77,24 @@ public class GlobleGame {
     @Column(name = "region", length = 16, nullable = false)
     private Region region;
 
+    /**
+     * CLASSIC or HARD; null on rows from before Hard, which are classic (see the class
+     * comment). Nullable because it was added to a table that already had rows.
+     */
+    @Convert(converter = GlobleColumns.VariantName.class)
+    @Column(name = "variant", length = 16)
+    private Variant variant;
+
     /** Daily only. */
     @Convert(converter = GlobleColumns.DateText.class)
     @Column(name = "puzzle_date", length = 10)
     private LocalDate puzzleDate;
 
     /**
-     * "userId/username/date" on a daily row, null on any other: the rule "one daily per
-     * player per day" as a single unique column.
+     * "userId/username/date" on a classic daily row, "userId/username/date/HARD" on a
+     * Hard one, null on any other: the rule "one daily per player per day per variant"
+     * as a single unique column. The classic form is the one rows have always had, so
+     * a classic game written now still collides with one written before Hard existed.
      *
      * <p>It is one column because that is the only shape of unique key Hibernate
      * creates on SQLite. Its SQLite dialect adds multi-column keys with ALTER TABLE,
@@ -116,26 +132,39 @@ public class GlobleGame {
     protected GlobleGame() {
     }
 
-    private GlobleGame(Player player, Mode mode, Kind kind, Region region, Instant now) {
+    private GlobleGame(Player player, Mode mode, Kind kind, Region region, Variant variant, Instant now) {
         this.userId = player.id();
         this.username = player.username();
         this.mode = mode;
         this.kind = kind;
         this.region = region;
+        this.variant = variant;
         this.status = Status.PLAYING;
         this.startedAt = now;
     }
 
-    /** Today's puzzle for this player. Always a whole-world country game. */
+    /** Today's classic puzzle for this player. */
     public static GlobleGame daily(Player player, LocalDate date, Instant now) {
-        GlobleGame game = new GlobleGame(player, Mode.DAILY, Kind.COUNTRY, Region.WORLD, now);
+        return daily(player, date, Variant.CLASSIC, now);
+    }
+
+    /** Today's puzzle of one variant for this player. Always a whole-world country game. */
+    public static GlobleGame daily(Player player, LocalDate date, Variant variant, Instant now) {
+        GlobleGame game = new GlobleGame(player, Mode.DAILY, Kind.COUNTRY, Region.WORLD, variant, now);
         game.puzzleDate = date;
-        game.dailyKey = player.id() + "/" + player.username() + "/" + date;
+        game.dailyKey = dailyKey(player, date, variant);
         return game;
     }
 
-    public static GlobleGame unlimited(Player player, Kind kind, Region region, String answerCode, Instant now) {
-        GlobleGame game = new GlobleGame(player, Mode.UNLIMITED, kind, region, now);
+    /** The classic form is unchanged from before Hard; see the column of the same name. */
+    static String dailyKey(Player player, LocalDate date, Variant variant) {
+        String key = player.id() + "/" + player.username() + "/" + date;
+        return variant == Variant.CLASSIC ? key : key + "/" + variant.name();
+    }
+
+    public static GlobleGame unlimited(Player player, Kind kind, Region region, Variant variant, String answerCode,
+                                       Instant now) {
+        GlobleGame game = new GlobleGame(player, Mode.UNLIMITED, kind, region, variant, now);
         game.answerCode = answerCode;
         return game;
     }
@@ -174,6 +203,14 @@ public class GlobleGame {
         return userId == player.id() && player.username().equals(username);
     }
 
+    /**
+     * Whether this is an unlimited game in the slot (kind, region, variant). Each slot
+     * has at most one game in progress, and each resumes on its own.
+     */
+    public boolean inSlot(Kind kind, Region region, Variant variant) {
+        return this.kind == kind && this.region == region && getVariant() == variant;
+    }
+
     public Long getId() {
         return id;
     }
@@ -196,6 +233,11 @@ public class GlobleGame {
 
     public Region getRegion() {
         return region;
+    }
+
+    /** Never null: a row from before Hard is classic. */
+    public Variant getVariant() {
+        return Variant.orClassic(variant);
     }
 
     public LocalDate getPuzzleDate() {

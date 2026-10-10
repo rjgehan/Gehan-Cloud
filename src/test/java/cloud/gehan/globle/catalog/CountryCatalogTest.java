@@ -83,7 +83,7 @@ class CountryCatalogTest {
                 List<Country> pool = catalog.answerable(region, kind);
                 assertThat(pool).isNotEmpty();
                 assertThat(pool).allMatch(Country::answer);
-                assertThat(pool).allMatch(c -> region.includes(c.region()));
+                assertThat(pool).allMatch(c -> region.includes(c.region(), c.smallIsland()));
                 if (kind == Kind.CAPITAL) {
                     assertThat(pool).allMatch(Country::hasCapital);
                 }
@@ -115,7 +115,79 @@ class CountryCatalogTest {
         assertThat(GreatCircle.km(90, 0, -90, 0)).isCloseTo(Math.PI * GreatCircle.EARTH_RADIUS_KM, within(0.5));
     }
 
+    @Test
+    void everyPlaceHasADifficultyAndAnIslandFlag() {
+        assertThat(catalog.require("USA").difficulty()).isEqualTo(1);
+        assertThat(catalog.require("JPN").difficulty()).isEqualTo(1);
+        assertThat(catalog.require("TUV").difficulty()).isEqualTo(5);
+        assertThat(catalog.require("SWZ").difficulty()).isEqualTo(5);
+        assertThat(catalog.all()).allSatisfy(c -> assertThat(c.difficulty()).isBetween(1, 5));
+        // Territories are never the answer; the data marks them 5 and not small islands.
+        assertThat(catalog.require("GRL").answer()).isFalse();
+        assertThat(catalog.require("GRL").difficulty()).isEqualTo(5);
+        assertThat(catalog.all()).filteredOn(c -> !c.answer()).noneMatch(Country::smallIsland);
+        for (int tier = 1; tier <= 5; tier++) {
+            int t = tier;
+            assertThat(catalog.answerable(Region.WORLD, Kind.COUNTRY)).as("tier %d", tier)
+                    .anyMatch(c -> c.difficulty() == t);
+        }
+    }
+
+    /** "Just no obscure island nations, like Japan still counts but not Tonga." */
+    @Test
+    void mainlandLeavesOutExactlyTheSmallIslandNations() {
+        List<Country> mainland = catalog.answerable(Region.MAINLAND, Kind.COUNTRY);
+        assertThat(mainland).hasSize(166).noneMatch(Country::smallIsland);
+        assertThat(mainland).extracting(Country::code).contains(
+                "JPN", "GBR", "IRL", "ISL", "CUB", "NZL", "MDG", "LKA", "PHL", "IDN", "TWN", "HTI", "DOM",
+                "PNG", "TLS", "BRN", "AUS", "AND", "VAT", "MCO", "SMR", "LIE", "LUX");
+        assertThat(mainland).extracting(Country::code).doesNotContain(
+                "TON", "FJI", "JAM", "BHS", "TTO", "BRB", "MLT", "CYP", "BHR", "SGP", "MDV", "MUS", "SYC",
+                "COM", "STP", "CPV", "SLB", "VUT", "WSM", "KIR", "TUV", "NRU", "PLW", "MHL", "FSM", "LCA",
+                "VCT", "GRD", "ATG", "DMA", "KNA");
+        assertThat(catalog.answerable(Region.MAINLAND, Kind.CAPITAL)).hasSameSizeAs(mainland);
+    }
+
     // ------------------------------------------------------------------ refusing bad data
+
+    /** A countries.json from before Hard has neither field, and is refused rather than guessed at. */
+    @Test
+    void refusesAPlaceWithoutADifficultyOrIslandFlag() {
+        String distances = "{\"codes\":[\"AAA\",\"BBB\",\"CCC\",\"DDD\",\"EEE\"],\"km\":"
+                + "[[0,1,1,1,1],[1,0,1,1,1],[1,1,0,1,1],[1,1,1,0,1],[1,1,1,1,0]]}";
+        String good = countries("AAA", "BBB", "CCC", "DDD", "EEE");
+        assertThat(load(good, distances).require("AAA").difficulty()).isEqualTo(3);
+
+        for (String broken : List.of(
+                good.replaceFirst("\"difficulty\":3,", ""),
+                good.replaceFirst("\"difficulty\":3", "\"difficulty\":6"),
+                good.replaceFirst("\"difficulty\":3", "\"difficulty\":0"),
+                good.replaceFirst("\"difficulty\":3", "\"difficulty\":2.5"),
+                good.replaceFirst("\"difficulty\":3", "\"difficulty\":\"3\""))) {
+            assertThatThrownBy(() -> load(broken, distances))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("difficulty");
+        }
+        for (String broken : List.of(
+                good.replaceFirst("\"smallIsland\":false,", ""),
+                good.replaceFirst("\"smallIsland\":false", "\"smallIsland\":\"no\""))) {
+            assertThatThrownBy(() -> load(broken, distances))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("smallIsland");
+        }
+    }
+
+    /** Every answer a small island: a Mainland game could never start. */
+    @Test
+    void refusesDataWithNothingOnTheMainland() {
+        String distances = "{\"codes\":[\"AAA\",\"BBB\",\"CCC\",\"DDD\",\"EEE\"],\"km\":"
+                + "[[0,1,1,1,1],[1,0,1,1,1],[1,1,0,1,1],[1,1,1,0,1],[1,1,1,1,0]]}";
+        String islands = countries("AAA", "BBB", "CCC", "DDD", "EEE")
+                .replace("\"smallIsland\":false", "\"smallIsland\":true");
+        assertThatThrownBy(() -> load(islands, distances))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("mainland");
+    }
 
     @Test
     void refusesADistanceFileForADifferentSetOfCountries() {
@@ -189,7 +261,8 @@ class CountryCatalogTest {
                 out.append(',');
             }
             out.append("{\"code\":\"").append(codes[i]).append("\",\"name\":\"Place ").append(i)
-                    .append("\",\"iso2\":null,\"aliases\":[],\"answer\":true,\"region\":\"")
+                    .append("\",\"iso2\":null,\"aliases\":[],\"answer\":true,")
+                    .append("\"difficulty\":3,\"smallIsland\":false,\"region\":\"")
                     .append(regions[i % regions.length]).append("\",\"lat\":").append(i + 1)
                     .append(",\"lng\":").append(i + 1)
                     .append(",\"capital\":{\"name\":\"City ").append(i)

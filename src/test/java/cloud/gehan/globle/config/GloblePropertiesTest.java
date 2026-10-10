@@ -31,6 +31,26 @@ class GloblePropertiesTest {
         assertThat(defaults.getEpoch()).isEqualTo(LocalDate.of(2026, 10, 9));
         assertThat(defaults.getAnswerRepeatWindowDays()).isEqualTo(60);
         assertThat(defaults.getMaxGuesses()).isEqualTo(400);
+        assertThat(defaults.getHardWeights()).isEqualTo(Map.of(1, 0, 2, 1, 3, 3, 4, 6, 5, 8));
+    }
+
+    /** One tier set in application.properties leaves the others at their defaults. */
+    @Test
+    void hardWeightsBindPerTier() {
+        GlobleProperties properties = bind(Map.of("globle.hard-weights.1", "2", "globle.hard-weights.5", "20"));
+        assertThat(properties.getHardWeights()).isEqualTo(Map.of(1, 2, 2, 1, 3, 3, 4, 6, 5, 20));
+        assertThat(properties.hardWeight(5)).isEqualTo(20);
+        assertThat(properties.hardWeight(9)).isZero();
+    }
+
+    @Test
+    void hardWeightsThatMakeNoSenseAreRefused() {
+        assertThatThrownBy(() -> bind(Map.of("globle.hard-weights.6", "1"))).isInstanceOf(BindException.class);
+        assertThatThrownBy(() -> bind(Map.of("globle.hard-weights.2", "-1"))).isInstanceOf(BindException.class);
+        assertThatThrownBy(() -> bind(Map.of(
+                "globle.hard-weights.2", "0", "globle.hard-weights.3", "0",
+                "globle.hard-weights.4", "0", "globle.hard-weights.5", "0")))
+                .isInstanceOf(BindException.class);
     }
 
     @Test

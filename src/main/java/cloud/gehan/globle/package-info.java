@@ -1,6 +1,7 @@
 /**
- * Globle, a geography guessing game at {@code /globle}: a daily mystery country the
- * whole family shares, plus unlimited and capital-city practice modes.
+ * Globle, a geography guessing game at {@code /globle}: two daily mystery countries
+ * the whole family shares (classic, and Hard: blind, unprompted, and weighted toward
+ * obscure countries), plus practice rounds by region, Mainland, Capitals and Hard.
  *
  * <p>The game is built to be removable. Everything it needs lives under this
  * package, {@code resources/globle}, {@code templates/globle} and

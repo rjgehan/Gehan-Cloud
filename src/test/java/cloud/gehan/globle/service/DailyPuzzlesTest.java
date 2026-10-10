@@ -75,7 +75,8 @@ class DailyPuzzlesTest extends GlobleTestBase {
                 return super.nextInt(bound);
             }
         };
-        DailyPuzzles daily = new DailyPuzzles(days, catalog, longWindow, globleClock, recording);
+        DailyPuzzles daily = new DailyPuzzles(days, hardDays, new AnswerPools(catalog, longWindow), longWindow,
+                globleClock, recording);
         int window = catalog.answerable(Region.WORLD, Kind.COUNTRY).size() / 3;
 
         List<String> answers = new ArrayList<>();
