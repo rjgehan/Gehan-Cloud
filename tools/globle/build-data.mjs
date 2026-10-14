@@ -12,7 +12,8 @@
 // its capital's island out. Distances count only the 10m pieces of a country
 // that the globe actually draws, so no colour comes from an islet the player
 // cannot see. Names, regions, capitals and difficulty tiers are hand-curated
-// in lib/catalog.mjs; which answers are small island nations is worked out
+// in lib/catalog.mjs, and the Spanish names of every place and capital in
+// lib/catalog-es.mjs; which answers are small island nations is worked out
 // here from the geometry. lib/sources.mjs says how Natural Earth features
 // become countries. tools/globle/README.md explains the choices.
 //
@@ -29,6 +30,7 @@ import { topology } from 'topojson-server';
 import { feature, mergeArcs } from 'topojson-client';
 
 import { CATALOG, DIFFICULTY, EXTRA_ANSWERS, UN_MEMBERS } from './lib/catalog.mjs';
+import { CATALOG_ES } from './lib/catalog-es.mjs';
 import { normalise, OUTPUTS, REGIONS, REPO } from './lib/common.mjs';
 import { countryPolygons, fixWinding } from './lib/sources.mjs';
 import {
@@ -76,21 +78,63 @@ const fixed50 = new Map([...raw50].map(([code, polys]) => [code, fixWinding(poly
 
 // ---------------------------------------------------------------- names
 
-function i18nNames(code) {
+const LANGS = ['en', 'es'];
+
+/** The hand-written names of a place in one language: { name, aliases }. */
+const handNames = (code, lang) => (lang === 'en' ? CATALOG[code] : CATALOG_ES[code]);
+
+// lib/catalog-es.mjs has exactly one entry per place, each with a Spanish name,
+// and a Spanish capital exactly where catalog.mjs has a capital. Its lists are
+// written by hand, so a list that repeats itself is a slip worth stopping on.
+{
+  const missing = Object.keys(CATALOG).filter((code) => !CATALOG_ES[code]);
+  const extra = Object.keys(CATALOG_ES).filter((code) => !CATALOG[code]);
+  if (missing.length || extra.length) {
+    throw new Error(`lib/catalog-es.mjs must have one entry per catalog code; ${[
+      missing.length && `missing ${missing.join(', ')}`, extra.length && `not in catalog.mjs: ${extra.join(', ')}`,
+    ].filter(Boolean).join('; ')}`);
+  }
+  const isName = (s) => typeof s === 'string' && s.length > 0 && s.trim() === s;
+  const distinct = (code, what, name, aliases) => {
+    if (!isName(name)) throw new Error(`${code}: Spanish ${what} name ${JSON.stringify(name)} is empty or padded`);
+    if (!Array.isArray(aliases)) throw new Error(`${code}: Spanish ${what} aliases are not a list`);
+    const seen = new Set([normalise(name)]);
+    for (const a of aliases) {
+      if (!isName(a)) throw new Error(`${code}: Spanish ${what} alias ${JSON.stringify(a)} is empty or padded`);
+      if (seen.has(normalise(a))) {
+        throw new Error(`${code}: Spanish ${what} alias "${a}" repeats a name or alias it already has (case and accents do not count)`);
+      }
+      seen.add(normalise(a));
+    }
+  };
+  for (const code of Object.keys(CATALOG)) {
+    const es = CATALOG_ES[code];
+    distinct(code, 'country', es.name, es.aliases);
+    if (Boolean(es.capital) !== Boolean(CATALOG[code].capital)) {
+      throw new Error(`${code}: catalog.mjs has ${CATALOG[code].capital ? 'a' : 'no'} capital, `
+        + `but catalog-es.mjs has ${es.capital ? 'one' : 'none'}`);
+    }
+    if (es.capital) distinct(code, 'capital', es.capital[0], es.capital[1] ?? []);
+  }
+}
+
+function i18nNames(code, lang) {
   const alpha2 = CATALOG[code].iso2 !== undefined ? CATALOG[code].iso2 : countries.alpha3ToAlpha2(code);
   if (!alpha2) return [];
-  const names = countries.getName(alpha2, 'en', { select: 'all' }) ?? [];
-  // "Korea, Republic of" and "Netherlands (Kingdom of the)" are list sort keys,
-  // not things anyone types.
+  const names = countries.getName(alpha2, lang, { select: 'all' }) ?? [];
+  // "Korea, Republic of" and "Netherlands (Kingdom of the)" (in Spanish, "Congo
+  // (República Democrática del)") are list sort keys, not things anyone types.
   return names.filter((n) => !/[,(]/.test(n));
 }
 
 const codes = Object.keys(CATALOG).sort((a, b) =>
   CATALOG[a].name.localeCompare(CATALOG[b].name, 'en', { sensitivity: 'base' }));
 
-// Names and hand-written aliases are authoritative: a clash among them is a
-// mistake in the catalog. Aliases borrowed from i18n-iso-countries are only
-// kept when they point at exactly one country (it calls both Congos "Congo").
+// Names and hand-written aliases are authoritative, in both languages together:
+// a clash among them is a mistake in the catalogs, since the matcher accepts
+// either language whichever one the page shows. Aliases borrowed from
+// i18n-iso-countries are only kept when they point at exactly one country (it
+// calls both Congos "Congo"), again across both languages.
 const owner = new Map();
 const claim = (alias, code, what) => {
   const key = normalise(alias);
@@ -98,19 +142,31 @@ const claim = (alias, code, what) => {
   if (prev && prev !== code) throw new Error(`${what} "${alias}" of ${code} clashes with ${prev}`);
   owner.set(key, code);
 };
-for (const code of codes) claim(CATALOG[code].name, code, 'name');
-for (const code of codes) for (const a of CATALOG[code].aliases) claim(a, code, 'alias');
+for (const lang of LANGS) for (const code of codes) claim(handNames(code, lang).name, code, `${lang} name`);
+for (const lang of LANGS) {
+  for (const code of codes) for (const a of handNames(code, lang).aliases) claim(a, code, `${lang} alias`);
+}
 const borrowed = new Map();
-for (const code of codes) {
-  for (const a of i18nNames(code)) {
-    const key = normalise(a);
-    if (!borrowed.has(key)) borrowed.set(key, new Set());
-    borrowed.get(key).add(code);
+for (const lang of LANGS) {
+  for (const code of codes) {
+    for (const a of i18nNames(code, lang)) {
+      const key = normalise(a);
+      if (!borrowed.has(key)) borrowed.set(key, new Set());
+      borrowed.get(key).add(code);
+    }
   }
 }
 
-function aliasesFor(code) {
-  const seen = new Set([normalise(CATALOG[code].name)]);
+/**
+ * A place's aliases in one language: the hand-written ones, then
+ * i18n-iso-countries' names in that language that this place alone owns. Each
+ * language's list stands on its own, so a Spanish alias may be spelled like an
+ * English one; within a list, anything equal to the name or an earlier alias
+ * once case and accents are folded is left out (the client folds those itself).
+ */
+function aliasesFor(code, lang) {
+  const { name, aliases } = handNames(code, lang);
+  const seen = new Set([normalise(name)]);
   const out = [];
   const consider = (a, mustOwn) => {
     const key = normalise(a);
@@ -119,8 +175,8 @@ function aliasesFor(code) {
     seen.add(key);
     out.push(a);
   };
-  CATALOG[code].aliases.forEach((a) => consider(a, false));
-  i18nNames(code).forEach((a) => consider(a, true));
+  aliases.forEach((a) => consider(a, false));
+  i18nNames(code, lang).forEach((a) => consider(a, true));
   return out;
 }
 
@@ -138,16 +194,20 @@ function countryEntries(smallIslands) {
     const polygons = fixed10.get(code).length ? fixed10.get(code) : fixed50.get(code);
     const [lng, lat] = labelPoint(polygons);
     const iso2 = cat.iso2 !== undefined ? cat.iso2 : (countries.alpha3ToAlpha2(code) ?? null);
+    const catEs = CATALOG_ES[code];
     let capital = null;
     if (cat.capital) {
       const [name, cLat, cLng, capAliases = []] = cat.capital;
-      capital = { name, aliases: capAliases, lat: cLat, lng: cLng };
+      const [nameEs, capAliasesEs = []] = catEs.capital;
+      capital = { name, nameEs, aliases: capAliases, aliasesEs: capAliasesEs, lat: cLat, lng: cLng };
     }
     return {
       code,
       name: cat.name,
+      nameEs: catEs.name,
       iso2,
-      aliases: aliasesFor(code),
+      aliases: aliasesFor(code, 'en'),
+      aliasesEs: aliasesFor(code, 'es'),
       answer: answers.has(code),
       region: cat.region,
       difficulty: tierOf.get(code) ?? 5,

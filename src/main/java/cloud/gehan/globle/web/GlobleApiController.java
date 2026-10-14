@@ -63,10 +63,13 @@ public class GlobleApiController {
         return countries;
     }
 
-    /** The home screen: today's two dailies, streaks, and practice games in progress. */
+    /**
+     * The home screen: today's two dailies, streaks, practice games and "Name them all"
+     * runs in progress, and for the admin how many name requests are open.
+     */
     @GetMapping("/home")
     public Home home(Authentication authentication) {
-        return home.home(players.require(authentication));
+        return home.home(players.require(authentication), players.isAdmin(authentication));
     }
 
     @GetMapping("/daily")

@@ -6,7 +6,7 @@ directory exists so they can be regenerated and audited.
 
 | File | What it holds | Used by |
 | --- | --- | --- |
-| `src/main/resources/globle/countries.json` | 248 countries and territories: code, name, flag code, aliases, whether it can be an answer, region, difficulty (1–5), whether it is a small island nation, a label point, capital | server |
+| `src/main/resources/globle/countries.json` | 248 countries and territories: code, name and Spanish name, flag code, aliases in English and Spanish, whether it can be an answer, region, difficulty (1–5), whether it is a small island nation, a label point, capital (with its English and Spanish names and aliases) | server |
 | `src/main/resources/globle/distances.json` | 248×248 matrix of minimum great-circle km between every pair (0 = they touch) | server |
 | `src/main/resources/static/globle/world.json` | TopoJSON, one `countries` object, `id` = code, `properties.name` | browser |
 
@@ -23,7 +23,8 @@ npm run check     # validates them; exits non-zero on any failure
 
 The build is deterministic, so a rebuild on unchanged inputs gives no diff.
 Edit `lib/catalog.mjs` to rename a country, add an alias, move a capital or
-change a difficulty tier; edit `lib/sources.mjs` to change how Natural Earth
+change a difficulty tier; edit `lib/catalog-es.mjs` for a Spanish name or alias
+(see [Spanish names](#spanish-names)); edit `lib/sources.mjs` to change how Natural Earth
 features become countries.
 
 ## Sources and licences
@@ -31,10 +32,11 @@ features become countries.
 | Source | Used for | Licence |
 | --- | --- | --- |
 | [Natural Earth](https://www.naturalearthdata.com/) admin-0 countries, 1:10m and 1:50m, via [`world-atlas`](https://github.com/topojson/world-atlas) 2.0.2 | all geometry | public domain (package ISC) |
-| [`i18n-iso-countries`](https://github.com/michaelwittig/node-i18n-iso-countries) | ISO numeric → alpha-3/alpha-2 codes, extra English aliases | MIT |
+| [`i18n-iso-countries`](https://github.com/michaelwittig/node-i18n-iso-countries) | ISO numeric → alpha-3/alpha-2 codes, extra English and Spanish aliases | MIT |
 | `lib/catalog.mjs`, written by hand | display names, aliases, regions, answer set, capitals and their coordinates, difficulty tiers | part of this repo |
+| `lib/catalog-es.mjs`, written by hand | Spanish names and aliases of every place and capital | part of this repo |
 | `d3-geo`, `topojson-client`, `topojson-server`, `polylabel` | geometry code only | ISC |
-| [`world-countries`](https://github.com/mledoze/countries) 5.1.0 (dev only) | **cross-checks in `check-data.mjs` only** — borders, UN membership, capital names | ODbL-1.0 |
+| [`world-countries`](https://github.com/mledoze/countries) 5.1.0 (dev only) | **cross-checks in `check-data.mjs` only** — borders, UN membership, capital names, Spanish names | ODbL-1.0 |
 
 `world-countries` is under the ODbL, a share-alike *database* licence. It is
 deliberately only read by the checker and nothing from it is copied into the
@@ -203,12 +205,99 @@ Natural Earth's defaults are used except where the game needs otherwise:
   so only the Republic of the Congo keeps it, by hand). Duplicates that differ
   only by case or accents are dropped, since the client folds those itself.
 
+## Spanish names
+
+Every place has a Spanish name (`nameEs`) and Spanish aliases (`aliasesEs`),
+and so does every capital. They come from `lib/catalog-es.mjs`, written by
+hand with one entry per code: the build fails if it misses a code or has one
+`lib/catalog.mjs` lacks, if a place has a Spanish capital without an English
+one or the other way round, or if an entry repeats itself (an alias equal to
+its own name or an earlier alias, case and accents aside). The page shows the
+names in its language and accepts both languages' names whichever one it
+shows (`match.js`), so a Spanish speaker can type "Germany" and an English
+speaker "Alemania". The server keeps naming places in English.
+
+- **Sources.** The names follow the country list of the RAE's *Diccionario
+  panhispánico de dudas* and Fundéu's recommendations: the forms in common use
+  across Latin America and Spain (Alemania, Países Bajos, Arabia Saudita, Catar,
+  Baréin, Yibuti, Esuatini, Fiyi, Palaos, Surinam, Belice, Chequia, Macedonia
+  del Norte, Guinea-Bisáu, Bangladés, Birmania, Timor Oriental), and their
+  capitals (Pekín, Nueva Delhi, Adís Abeba, Yamena, Abuya, Nom Pen, Pionyang,
+  Taipéi, Reikiavik, Liubliana, Nasáu, Puerto España). On top, the build
+  borrows `i18n-iso-countries`' Spanish names (MIT) as aliases, under the
+  same rule as the English ones: kept only when exactly one place has them,
+  and skipped when they are sort keys ("Congo (República Democrática del)").
+  Today that adds Brunei Darussalam, Guinea Bissau, Heard e Islas McDonald,
+  República Democrática Popular de Lao, Georgia del Sur y las
+  Islas Sandwich del Sur and República Árabe Siria. world-countries (ODbL) is
+  only read by the checker, as for everything else.
+- **Aliases** are the other Spanish names people type: Spain against Latin
+  America (Arabia Saudí, Kazajstán, Nueva Zelandia, Suráfrica), the
+  international spelling where Spanish texts use it too (Kenya, Rwanda, Malawi,
+  Botswana, Qatar, Iraq, Fiji, Palau), spellings Fundéu records in use beside
+  the ones it recommends (Kazakistán, and Riyad for Riad), Congo-Kinsasa
+  beside Congo-Kinshasa (Kinsasa being the capital's Spanish spelling), the
+  "Rep." people write for República (Rep. Checa, Rep. Dominicana, Rep.
+  Centroafricana, Rep. Democrática del Congo), colloquial and older names
+  (Holanda, EE. UU., EEUU, EUA, Inglaterra, Suazilandia, Zaire, Rodesia,
+  Ceilán, Persia, Siam), and the capital forms beside them (Beijing, La Haya,
+  Ciudad del Cabo, Rangún). Each language's list stands on its own, so a
+  Spanish alias may be spelled like an English one (Malvinas, Zaire); spellings
+  that differ only by case or accents are left out, since the matcher folds
+  both ("Peru" is not listed beside Perú).
+- **Capitals.** `nameEs` repeats the English name where Spanish uses it
+  unchanged (Lima, Ottawa, Kingston), so it is never missing. A capital alias
+  that would only repeat its own country's name (Guatemala, Panamá, Kuwait) is
+  left out: the capitals list already finds a capital by its country's name.
+- **Articles.** A leading article is not written as an alias (Las Bahamas, el
+  Perú, los Estados Unidos, la India): the matcher drops "el", "la", "los" and
+  "las" the way it drops "the". Where the article is part of the name it stays
+  (El Salvador, El Cairo, La Habana, La Paz, La Haya, La Valeta, El Aaiún).
+- **Questionable cases mirror the English data.** English lists England,
+  Scotland, Wales and Northern Ireland for the United Kingdom, so Spanish has
+  Inglaterra, Escocia, Gales and Irlanda del Norte. "Bretaña" is left out: in
+  Spanish it is Brittany. "América" is not added for the United States, since
+  to a Spanish speaker it is the continent; the English alias "America" still
+  finds the United States, as it always has.
+- **Judgement calls.** Falkland Islands → Islas Malvinas (Malvinas an alias),
+  its capital → Puerto Argentino (Stanley and Puerto Stanley aliases): the
+  names Spanish speakers use, as Fundéu records. Myanmar → Birmania, the DPD's
+  preference (Myanmar an alias). Timor-Leste → Timor Oriental. Czechia →
+  Chequia (República Checa an alias). Belarus → Bielorrusia (Belarús an alias).
+  Moldova → Moldavia. Ukraine's capital → Kiev, the traditional Spanish form
+  (Kyiv an alias). Myanmar's capital → Naipyidó. Grenada → Granada. Saint
+  Kitts and Nevis → San Cristóbal y Nieves. Saint Martin (the French part) →
+  San Martín, and Sint Maarten keeps its name, as English keeps them apart.
+  Guam's capital → Agaña, its Spanish name. Romania → Rumania (Rumanía is the
+  same once accents are folded).
+- **Uniqueness.** Every name and alias in both languages together names one
+  place: a hand-written clash fails the build (`es alias "…" of KEN clashes
+  with TZA`), and `check-data.mjs` checks it again on the output. The
+  capitals are checked too, under the client's matcher; the only capital
+  names two places share are the English ones that already did (Kingston,
+  George Town/Georgetown, Basse-Terre/Basseterre).
+
 ## What `check-data.mjs` verifies
 
-Contract shape and field order of every entry; codes identical across all three
-files; 197 answers, each with a region and a capital; names and aliases
-unambiguous, also under the client's matcher (match.js findExact), which Hard
-relies on because it has no dropdown; every answer has a difficulty of 1–5 and every territory 5;
+Contract shape and field order of every entry, a Spanish name on every place
+and capital; codes identical across all three files; 197 answers, each with a
+region and a capital; names and aliases unambiguous in English and Spanish
+together, also under the client's matcher (match.js findExact, with the page
+in either language), which Hard relies on because it has no dropdown; the
+same for capital names in both languages, apart from the three homonym pairs
+above; well-known Spanish names (Alemania, Estados Unidos, Reino Unido, Países
+Bajos and its alias Holanda, Islas Malvinas, Costa de Marfil, Londres, Pekín,
+Ciudad de México, ...) and what Spanish speakers type ("los Estados Unidos",
+"el Perú", "Sta. Lucía", "EE. UU.", "Rep. Checa", "congo kinsasa", "Germany"
+on a page in Spanish, and capitals such as "riyad"), with
+match.js labelling places and capitals in the page's language; the answer
+countries whose name or alias, in either language, is the start of another
+answer's are exactly the expected pairs (Niger/Nigeria, Guinea/Guinea-Bissau
+and Guinea Ecuatorial, Sudán/Sudán del Sur, Dominica/Dominican Republic,
+Congo/Congo-Kinshasa, Corea/Corea del Norte, UK/Ukraine, and Irlanda/Irlanda
+del Norte for the United Kingdom), since Name them all waits after such a
+name to see whether more is coming;
+every answer has a difficulty of 1–5 and every territory 5;
 each tier holds 20–55 answers; the owner's examples are at the right end of
 the scale (tier 1: USA, China, Russia, Brazil, India, Australia, Canada,
 France, Germany, UK, Japan, Italy, Spain, Mexico, Egypt; tier 5:
@@ -247,8 +336,13 @@ The world-countries cross-check prints notes, not failures. Expected ones:
 Kosovo's borders (world-countries files it as `UNK`, not `XKX`); Spain–Morocco (Ceuta
 and Melilla dropped); Sri Lanka–India (28 km across Adam's Bridge);
 Namibia–Zimbabwe touching at Kazungula (Natural Earth puts a quadripoint
-there); the punctuation of Guernsey's and the United States' capitals; and
-world-countries marking Vatican City a UN member (it is an observer).
+there); the punctuation of Guernsey's and the United States' capitals;
+world-countries marking Vatican City a UN member (it is an observer); and its
+Spanish names that are not ours and that the matcher does not find: Alandia
+(Islas Åland), "Congo (Rep. Dem.)" (a sort key), Islas Cocos o Islas Keeling,
+Islas Faroe (Feroe), Islas Svalbard y Jan Mayen, Islas Turks y Caicos (Turcas),
+Islas Tokelau and Islas Vírgenes del Reino Unido (Británicas). They are left
+as notes rather than copied in, to keep the ODbL out of the output.
 
 ## Removing
 

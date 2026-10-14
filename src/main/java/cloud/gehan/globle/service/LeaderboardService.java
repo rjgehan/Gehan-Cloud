@@ -3,10 +3,12 @@ package cloud.gehan.globle.service;
 import cloud.gehan.globle.model.Kind;
 import cloud.gehan.globle.model.Mode;
 import cloud.gehan.globle.model.Player;
+import cloud.gehan.globle.model.Region;
 import cloud.gehan.globle.model.Status;
 import cloud.gehan.globle.model.Variant;
 import cloud.gehan.globle.repository.GameSummary;
 import cloud.gehan.globle.repository.GlobleGameRepository;
+import cloud.gehan.globle.repository.RollCallSummary;
 import cloud.gehan.globle.view.Leaderboard;
 import cloud.gehan.model.User;
 import cloud.gehan.repository.UserRepository;
@@ -49,6 +51,14 @@ import java.util.stream.Collectors;
  *     distribution; a request asks for one. Rows from before Hard are classic.</li>
  * <li><b>Practice boards</b> are Countries (classic country games in every region,
  *     Mainland included), Capitals, and Hard.</li>
+ * <li><b>"Name them all"</b> has one board: whole-world runs that count only (a
+ *     continent's 54 or 14 are not comparable with the world's 197), one row per
+ *     player with how many they played and their best run, by most named, then
+ *     fastest. A run counts once it is finished with at least one name typed; one
+ *     with nothing typed, ended empty or only filled in, is in neither the played
+ *     count nor the best. Filled-in countries count, as they do in the run; the row
+ *     says how many there were. Runs in progress do not count, and no roll call run
+ *     touches any other board.</li>
  * </ul>
  */
 @Service
@@ -66,13 +76,15 @@ public class LeaderboardService {
     private final UserRepository users;
     private final DailyPuzzles puzzles;
     private final GlobleClock clock;
+    private final RollCallPools rollCallPools;
 
     public LeaderboardService(GlobleGameRepository games, UserRepository users, DailyPuzzles puzzles,
-                              GlobleClock clock) {
+                              GlobleClock clock, RollCallPools rollCallPools) {
         this.games = games;
         this.users = users;
         this.puzzles = puzzles;
         this.clock = clock;
+        this.rollCallPools = rollCallPools;
     }
 
     public Leaderboard leaderboard(Player viewer, Variant variant) {
@@ -99,7 +111,8 @@ public class LeaderboardService {
                         unlimited(unlimited, g -> g.variant() == Variant.CLASSIC && g.kind() == Kind.COUNTRY, viewer),
                         unlimited(unlimited, g -> g.variant() == Variant.CLASSIC && g.kind() == Kind.CAPITAL, viewer),
                         unlimited(unlimited, g -> g.variant() == Variant.HARD, viewer)),
-                me(mine, today));
+                me(mine, today),
+                rollCall(existing, viewer));
     }
 
     /**
@@ -232,6 +245,28 @@ public class LeaderboardService {
                 .forEach(g -> distribution.merge(bucket(guesses(g)), 1, Integer::sum));
         return new Leaderboard.Me(t.played, t.wins, round(t.rate(), 2), round(t.average(), 1), s.current, s.max,
                 distribution);
+    }
+
+    /** "Name them all": whole-world runs that count, by players who still exist; see the class comment. */
+    private List<Leaderboard.RollCallRow> rollCall(Map<Long, String> existing, Player viewer) {
+        int total = rollCallPools.pool(Region.WORLD).size();
+        Map<String, List<RollCallSummary>> byUser = games
+                .rollCallSummaries(Mode.ROLLCALL, Region.WORLD, Status.FINISHED).stream()
+                .filter(RollCallSummary::counts)
+                .filter(r -> r.userId() != null && Objects.equals(existing.get(r.userId()), r.username()))
+                .collect(Collectors.groupingBy(RollCallSummary::username, HashMap::new, Collectors.toList()));
+        Comparator<RollCallSummary> better = Comparator.comparingInt(RollCallSummary::named)
+                .thenComparing(Comparator.comparingLong(RollCallSummary::seconds).reversed());
+        return byUser.entrySet().stream()
+                .map(e -> {
+                    RollCallSummary best = e.getValue().stream().max(better).orElseThrow();
+                    return new Leaderboard.RollCallRow(e.getKey(), e.getValue().size(), best.named(), total,
+                            best.seconds(), best.autoCount(), e.getKey().equals(viewer.username()));
+                })
+                .sorted(Comparator.comparingInt(Leaderboard.RollCallRow::best).reversed()
+                        .thenComparingLong(Leaderboard.RollCallRow::bestSeconds)
+                        .thenComparing(Leaderboard.RollCallRow::username))
+                .toList();
     }
 
     // ------------------------------------------------------------------ helpers

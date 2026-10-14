@@ -109,4 +109,32 @@ public final class GlobleColumns {
             super(Variant.class);
         }
     }
+
+    @Converter(autoApply = false)
+    public static class AutofillName extends EnumName<Autofill> {
+        public AutofillName() {
+            super(Autofill.class);
+        }
+    }
+
+    @Converter(autoApply = false)
+    public static class NameRequestStatusName extends EnumName<NameRequestStatus> {
+        public NameRequestStatusName() {
+            super(NameRequestStatus.class);
+        }
+    }
+
+    @Converter(autoApply = false)
+    public static class NameRequestSourceName extends EnumName<NameRequestSource> {
+        public NameRequestSourceName() {
+            super(NameRequestSource.class);
+        }
+    }
+
+    @Converter(autoApply = false)
+    public static class LangName extends EnumName<Lang> {
+        public LangName() {
+            super(Lang.class);
+        }
+    }
 }

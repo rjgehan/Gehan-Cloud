@@ -16,7 +16,8 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * One game by one player: a daily puzzle, or an unlimited (country or capital) round.
+ * One game by one player: a daily puzzle, an unlimited (country or capital) round, or
+ * a roll call run ("Name them all"; see {@link #rollCall}).
  *
  * <p><b>The owner is a plain id, not a foreign key.</b> A foreign key into
  * {@code users} would make deleting a user fail while they have games, which would let
@@ -44,6 +45,15 @@ import java.util.List;
  * {@code ddl-auto=update} adds a column without filling it, so every row written
  * before Hard existed has a null variant. They were all classic games, and
  * {@link #getVariant()} reads null as exactly that. Nothing rewrites those rows.
+ *
+ * <p><b>Roll call rows</b> reuse the table rather than adding one: mode ROLLCALL, kind
+ * COUNTRY, the run's region, variant CLASSIC, no answer, and the named countries in
+ * {@code guesses}, in the order named, the ones filled in automatically first. Two
+ * columns serve them alone, {@code autofill} and {@code autofill_count}. Both are
+ * nullable wrapper types: they were added to a table that already had rows, and a
+ * primitive would make Hibernate add a NOT NULL column, which SQLite refuses to add to
+ * a table with rows. Every other row, and every row from before, has nulls there, and
+ * nothing rewrites them.
  */
 @Entity
 @Table(name = "globle_game",
@@ -129,6 +139,22 @@ public class GlobleGame {
     @Column(name = "finished_at")
     private Instant finishedAt;
 
+    /**
+     * Roll call only: what was filled in when the run started (OFF, EASY, KNOWN or
+     * MINE). Null on every other row; see the class comment for why it is nullable.
+     */
+    @Convert(converter = GlobleColumns.AutofillName.class)
+    @Column(name = "autofill", length = 16)
+    private Autofill autofill;
+
+    /**
+     * Roll call only: the first this-many codes of {@code guesses} were filled in
+     * automatically; the rest were typed. Null on every other row. An Integer, not an
+     * int, so the column it adds is nullable (see the class comment).
+     */
+    @Column(name = "autofill_count")
+    private Integer autofillCount;
+
     protected GlobleGame() {
     }
 
@@ -169,6 +195,21 @@ public class GlobleGame {
         return game;
     }
 
+    /**
+     * A new roll call run in a region, with {@code autoCodes} already named on the
+     * player's behalf (none for {@link Autofill#OFF}). They go first in the list and are
+     * counted by {@code autofill_count}; everything named after them was typed.
+     */
+    public static GlobleGame rollCall(Player player, Region region, Autofill autofill, List<String> autoCodes,
+                                      Instant now) {
+        GlobleGame game = new GlobleGame(player, Mode.ROLLCALL, Kind.COUNTRY, region, Variant.CLASSIC, now);
+        game.autofill = autofill;
+        game.guesses = String.join(SEPARATOR, autoCodes);
+        game.guessCount = autoCodes.size();
+        game.autofillCount = autoCodes.size();
+        return game;
+    }
+
     public List<String> guessCodes() {
         if (guesses == null || guesses.isEmpty()) {
             return List.of();
@@ -187,9 +228,47 @@ public class GlobleGame {
         this.guessCount = codes.size();
     }
 
+    /**
+     * Roll call: how many of the leading codes were filled in automatically. 0 on any
+     * other row. Never more than the codes there are.
+     */
+    public int autoCount() {
+        return autofillCount == null ? 0 : Math.max(0, Math.min(autofillCount, guessCount));
+    }
+
+    /** Roll call: the codes the player typed, in the order typed (the auto ones excluded). */
+    public List<String> typedCodes() {
+        List<String> codes = guessCodes();
+        return codes.subList(Math.min(autoCount(), codes.size()), codes.size());
+    }
+
+    /** Roll call: whether the player has typed at least one name, beyond what was filled in. */
+    public boolean hasTyped() {
+        return guessCount > autoCount();
+    }
+
+    /**
+     * Roll call: whether this run counts toward the player's record - the best run and
+     * the finished-run count on the setup card, the runs "mine" reads, and the board. It
+     * does once it is FINISHED with at least one name typed. A run with nothing typed,
+     * ended empty or holding only what autofill gave it, stays stored as FINISHED but
+     * counts nowhere: none of it was the player's doing. It is the line the abandon rule
+     * draws too (a run with nothing typed is dropped), and the board applies the same
+     * rule to its summaries (RollCallSummary#counts).
+     */
+    public boolean counts() {
+        return mode == Mode.ROLLCALL && status == Status.FINISHED && hasTyped();
+    }
+
+    /**
+     * Ends the game. A daily or practice game ends WON or GAVE_UP, a roll call run
+     * FINISHED, and never the other way round: the boards for each count only their
+     * own statuses, so a mismatch would be a game counted nowhere or in the wrong place.
+     */
     public void finish(Status outcome, Instant now) {
-        if (outcome == Status.PLAYING) {
-            throw new IllegalArgumentException("A game finishes as WON or GAVE_UP");
+        if (outcome == Status.PLAYING || (outcome == Status.FINISHED) != (mode == Mode.ROLLCALL)) {
+            throw new IllegalArgumentException(
+                    "A daily or practice game finishes as WON or GAVE_UP, a roll call run as FINISHED");
         }
         this.status = outcome;
         this.finishedAt = now;
@@ -262,5 +341,15 @@ public class GlobleGame {
 
     public Instant getFinishedAt() {
         return finishedAt;
+    }
+
+    /** Never null: a row that is not a roll call run, or predates it, reads as OFF. */
+    public Autofill getAutofill() {
+        return Autofill.orOff(autofill);
+    }
+
+    /** As stored: null on every row that is not a roll call run. See {@link #autoCount()}. */
+    public Integer getAutofillCount() {
+        return autofillCount;
     }
 }

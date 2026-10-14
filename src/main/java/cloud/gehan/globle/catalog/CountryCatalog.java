@@ -147,15 +147,19 @@ public class CountryCatalog {
             JsonNode capital = node.get("capital");
             Country.Capital cap = capital == null || capital.isNull() ? null : new Country.Capital(
                     text(capital, "name", parsed.size()),
+                    spanishName(capital, where + " capital"),
                     strings(capital.get("aliases")),
+                    strings(capital.get("aliasesEs")),
                     latitude(capital, where + " capital"),
                     longitude(capital, where + " capital"));
             JsonNode iso2 = node.get("iso2");
             parsed.add(new Country(
                     code,
                     text(node, "name", parsed.size()),
+                    spanishName(node, where),
                     iso2 == null || iso2.isNull() ? null : iso2.asText(),
                     strings(node.get("aliases")),
+                    strings(node.get("aliasesEs")),
                     node.path("answer").asBoolean(false),
                     region,
                     difficulty(node, where),
@@ -283,6 +287,20 @@ public class CountryCatalog {
                     + Country.EASIEST + " to " + Country.HARDEST);
         }
         return value.asInt();
+    }
+
+    /**
+     * Required on every place and every capital, so a countries.json from before
+     * Spanish names is refused rather than served to a page that would show Spanish
+     * players a blank, or fall back to English for some places and not others.
+     * Spanish aliases are optional, like the English ones: many places have none.
+     */
+    private static String spanishName(JsonNode node, String where) {
+        JsonNode value = node.get("nameEs");
+        if (value == null || !value.isTextual() || value.asText().isBlank()) {
+            throw inconsistent(where + ": nameEs (the Spanish name) is missing or blank");
+        }
+        return value.asText();
     }
 
     private static boolean flag(JsonNode node, String field, String where) {

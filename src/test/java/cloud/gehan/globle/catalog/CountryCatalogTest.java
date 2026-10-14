@@ -8,8 +8,13 @@ import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
 
 import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -148,6 +153,105 @@ class CountryCatalogTest {
         assertThat(catalog.answerable(Region.MAINLAND, Kind.CAPITAL)).hasSameSizeAs(mainland);
     }
 
+    // ------------------------------------------------------------------ Spanish names
+
+    @Test
+    void everyPlaceAndEveryCapitalHasASpanishName() {
+        assertThat(catalog.all()).allSatisfy(c -> {
+            assertThat(c.nameEs()).as("%s nameEs", c.code()).isNotBlank();
+            assertThat(c.aliasesEs()).as("%s aliasesEs", c.code()).allSatisfy(a -> assertThat(a).isNotBlank());
+            if (c.hasCapital()) {
+                assertThat(c.capital().nameEs()).as("%s capital nameEs", c.code()).isNotBlank();
+                assertThat(c.capital().aliasesEs()).as("%s capital aliasesEs", c.code())
+                        .allSatisfy(a -> assertThat(a).isNotBlank());
+            }
+        });
+    }
+
+    @Test
+    void spanishNamesAreTheOnesSpanishSpeakersUse() {
+        assertThat(catalog.require("DEU").nameEs()).isEqualTo("Alemania");
+        assertThat(catalog.require("USA").nameEs()).isEqualTo("Estados Unidos");
+        assertThat(catalog.require("USA").aliasesEs()).contains("EE. UU.", "EEUU");
+        assertThat(catalog.require("GBR").nameEs()).isEqualTo("Reino Unido");
+        assertThat(catalog.require("NLD").nameEs()).isEqualTo("Países Bajos");
+        assertThat(catalog.require("NLD").aliasesEs()).contains("Holanda");
+        assertThat(catalog.require("FLK").nameEs()).isEqualTo("Islas Malvinas");
+        assertThat(catalog.require("CIV").nameEs()).isEqualTo("Costa de Marfil");
+        assertThat(catalog.require("XKX").nameEs()).isEqualTo("Kosovo");
+        assertThat(catalog.require("GBR").capital().nameEs()).isEqualTo("Londres");
+        assertThat(catalog.require("CHN").capital().nameEs()).isEqualTo("Pekín");
+        assertThat(catalog.require("MEX").capital().nameEs()).isEqualTo("Ciudad de México");
+        assertThat(catalog.require("NLD").capital().aliasesEs()).contains("La Haya");
+        // Where Spanish uses the English name unchanged, it is repeated, never left out.
+        assertThat(catalog.require("PER").capital().nameEs()).isEqualTo("Lima");
+        // The English names are untouched: the server names places in English.
+        assertThat(catalog.require("DEU").name()).isEqualTo("Germany");
+        assertThat(catalog.require("GBR").capital().name()).isEqualTo("London");
+    }
+
+    /**
+     * The page accepts both languages whichever it shows, so no name or alias, English
+     * or Spanish, may name two places. Case and accents do not count, as on the page.
+     */
+    @Test
+    void noNameInEitherLanguageNamesTwoPlaces() {
+        Map<String, String> owners = new HashMap<>();
+        for (Country c : catalog.all()) {
+            List<String> names = new ArrayList<>();
+            names.add(c.name());
+            names.addAll(c.aliases());
+            names.add(c.nameEs());
+            names.addAll(c.aliasesEs());
+            for (String name : names) {
+                String key = Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}", "")
+                        .toLowerCase(Locale.ROOT).trim();
+                String previous = owners.putIfAbsent(key, c.code());
+                assertThat(previous == null || previous.equals(c.code()))
+                        .as("\"%s\" names both %s and %s", name, previous, c.code()).isTrue();
+            }
+        }
+    }
+
+    /** A countries.json from before Spanish names is refused, not shown half in English. */
+    @Test
+    void refusesAPlaceOrCapitalWithoutASpanishName() {
+        String distances = "{\"codes\":[\"AAA\",\"BBB\",\"CCC\",\"DDD\",\"EEE\"],\"km\":"
+                + "[[0,1,1,1,1],[1,0,1,1,1],[1,1,0,1,1],[1,1,1,0,1],[1,1,1,1,0]]}";
+        String good = countries("AAA", "BBB", "CCC", "DDD", "EEE");
+        CountryCatalog loaded = load(good, distances);
+        assertThat(loaded.require("AAA").nameEs()).isEqualTo("Lugar 0");
+        assertThat(loaded.require("AAA").capital().nameEs()).isEqualTo("Ciudad 0");
+
+        for (String broken : List.of(
+                good.replaceFirst("\"nameEs\":\"Lugar 0\",", ""),
+                good.replaceFirst("\"nameEs\":\"Lugar 0\"", "\"nameEs\":\" \""),
+                good.replaceFirst("\"nameEs\":\"Lugar 0\"", "\"nameEs\":null"),
+                good.replaceFirst("\"nameEs\":\"Lugar 0\"", "\"nameEs\":3"),
+                good.replaceFirst("\"nameEs\":\"Ciudad 2\",", ""),
+                good.replaceFirst("\"nameEs\":\"Ciudad 2\"", "\"nameEs\":\"\""))) {
+            assertThatThrownBy(() -> load(broken, distances))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("nameEs")
+                    .hasMessageContaining("globle.enabled=false");
+        }
+    }
+
+    /** Spanish aliases are optional, like the English ones: many places have none. */
+    @Test
+    void spanishAliasesMayBeLeftOut() {
+        String distances = "{\"codes\":[\"AAA\",\"BBB\",\"CCC\",\"DDD\",\"EEE\"],\"km\":"
+                + "[[0,1,1,1,1],[1,0,1,1,1],[1,1,0,1,1],[1,1,1,0,1],[1,1,1,1,0]]}";
+        String withAliases = countries("AAA", "BBB", "CCC", "DDD", "EEE")
+                .replaceFirst("\"aliasesEs\":\\[]", "\"aliasesEs\":[\"Otro\"]");
+        assertThat(load(withAliases, distances).require("AAA").aliasesEs()).containsExactly("Otro");
+
+        String without = countries("AAA", "BBB", "CCC", "DDD", "EEE").replace(",\"aliasesEs\":[]", "");
+        CountryCatalog loaded = load(without, distances);
+        assertThat(loaded.require("AAA").aliasesEs()).isEmpty();
+        assertThat(loaded.require("AAA").capital().aliasesEs()).isEmpty();
+    }
+
     // ------------------------------------------------------------------ refusing bad data
 
     /** A countries.json from before Hard has neither field, and is refused rather than guessed at. */
@@ -261,12 +365,15 @@ class CountryCatalogTest {
                 out.append(',');
             }
             out.append("{\"code\":\"").append(codes[i]).append("\",\"name\":\"Place ").append(i)
-                    .append("\",\"iso2\":null,\"aliases\":[],\"answer\":true,")
+                    .append("\",\"nameEs\":\"Lugar ").append(i)
+                    .append("\",\"iso2\":null,\"aliases\":[],\"aliasesEs\":[],\"answer\":true,")
                     .append("\"difficulty\":3,\"smallIsland\":false,\"region\":\"")
                     .append(regions[i % regions.length]).append("\",\"lat\":").append(i + 1)
                     .append(",\"lng\":").append(i + 1)
                     .append(",\"capital\":{\"name\":\"City ").append(i)
-                    .append("\",\"aliases\":[],\"lat\":").append(i + 1).append(",\"lng\":").append(i + 1)
+                    .append("\",\"nameEs\":\"Ciudad ").append(i)
+                    .append("\",\"aliases\":[],\"aliasesEs\":[],\"lat\":").append(i + 1)
+                    .append(",\"lng\":").append(i + 1)
                     .append("}}");
         }
         return out.append(']').toString();

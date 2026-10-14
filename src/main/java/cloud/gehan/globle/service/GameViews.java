@@ -51,8 +51,14 @@ public class GameViews {
     /**
      * @param answerCode the mystery: the day's for a daily, the game's own otherwise.
      *                   Used for distances always, shown only when the game is over.
+     * @throws IllegalArgumentException for a roll call run, which has no answer and
+     *                                  its own view (RollCallState); every lookup that
+     *                                  leads here names the daily or unlimited mode
      */
     public GameState of(GlobleGame game, String answerCode) {
+        if (game.getMode() == Mode.ROLLCALL) {
+            throw new IllegalArgumentException("A roll call run is not a guessing game");
+        }
         Country answer = catalog.require(answerCode);
         Kind kind = game.getKind();
 

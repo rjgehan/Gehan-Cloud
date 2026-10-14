@@ -22,11 +22,13 @@ import java.util.Map;
  * Turns failures in Globle's API into {@code {"error": "<code>"}} with a fitting status,
  * and nothing more: no message, no exception name, no stack trace, never the answer.
  *
- * <p>Scoped with {@code assignableTypes} to Globle's own controller. An unscoped
- * advice would start answering for every controller in the app, which is precisely
- * the kind of reach a removable feature must not have.
+ * <p>Scoped with {@code assignableTypes} to Globle's own controllers: the game's, "Name
+ * them all"'s and the name requests'. An unscoped advice would start answering for
+ * every controller in the app, which is precisely the kind of reach a removable
+ * feature must not have.
  */
-@RestControllerAdvice(assignableTypes = GlobleApiController.class)
+@RestControllerAdvice(assignableTypes = {GlobleApiController.class, RollCallApiController.class,
+        NameRequestApiController.class})
 @Order(Ordered.HIGHEST_PRECEDENCE)
 @ConditionalOnProperty(prefix = "globle", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class GlobleApiErrors {

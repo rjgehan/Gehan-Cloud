@@ -2,10 +2,12 @@ package cloud.gehan.globle;
 
 import cloud.gehan.globle.catalog.Country;
 import cloud.gehan.globle.catalog.CountryCatalog;
+import cloud.gehan.globle.model.Region;
 import cloud.gehan.globle.model.Variant;
 import cloud.gehan.globle.repository.GlobleDayRepository;
 import cloud.gehan.globle.repository.GlobleGameRepository;
 import cloud.gehan.globle.repository.GlobleHardDayRepository;
+import cloud.gehan.globle.repository.GlobleNameRequestRepository;
 import cloud.gehan.globle.service.DailyPuzzles;
 import cloud.gehan.repository.UserRepository;
 import cloud.gehan.service.UserService;
@@ -85,6 +87,9 @@ public abstract class GlobleTestBase {
     protected GlobleHardDayRepository hardDays;
 
     @Autowired
+    protected GlobleNameRequestRepository nameRequests;
+
+    @Autowired
     protected DailyPuzzles puzzles;
 
     @Autowired
@@ -98,6 +103,7 @@ public abstract class GlobleTestBase {
         games.deleteAll();
         days.deleteAll();
         hardDays.deleteAll();
+        nameRequests.deleteAll();
         users.deleteAll();
         clock.setDay(DAY_ONE);
     }
@@ -106,6 +112,12 @@ public abstract class GlobleTestBase {
     protected RequestPostProcessor player(String username) {
         userService.create(username, UserService.ROLE_USER);
         return user(username).roles(UserService.ROLE_USER);
+    }
+
+    /** Creates an admin account and returns a signed-in session for it, with the ADMIN role as /users wants. */
+    protected RequestPostProcessor admin(String username) {
+        userService.create(username, UserService.ROLE_ADMIN);
+        return user(username).roles(UserService.ROLE_ADMIN);
     }
 
     protected LocalDate day(int puzzleNumber) {
@@ -249,5 +261,36 @@ public abstract class GlobleTestBase {
     /** The player's database id, for building {@code Player}s and rows by hand. */
     protected long idOf(String username) {
         return users.findByUsername(username).orElseThrow().getId();
+    }
+
+    // ------------------------------------------------------------------ roll call
+
+    protected JsonNode startRollCall(RequestPostProcessor who, String region, String autofill) throws Exception {
+        return postOk("/globle/api/rollcall/new", Map.of("region", region, "autofill", autofill), who);
+    }
+
+    protected JsonNode nameIn(RequestPostProcessor who, long runId, String code) throws Exception {
+        return postOk("/globle/api/rollcall/" + runId + "/name", Map.of("code", code), who);
+    }
+
+    protected JsonNode finishRollCall(RequestPostProcessor who, long runId) throws Exception {
+        return postOk("/globle/api/rollcall/" + runId + "/finish", null, who);
+    }
+
+    protected JsonNode rollCallOptions(RequestPostProcessor who, String region) throws Exception {
+        return getOk("/globle/api/rollcall/options?region=" + region, who);
+    }
+
+    /** The countries a roll call run in this region asks for, in catalogue order, from the data itself. */
+    protected List<Country> rollCallPool(Region region) {
+        return catalog.all().stream()
+                .filter(Country::answer)
+                .filter(c -> region.includes(c.region(), c.smallIsland()))
+                .toList();
+    }
+
+    /** The codes of {@link #rollCallPool} of difficulty {@code tier} or easier. */
+    protected List<String> rollCallTiers(Region region, int tier) {
+        return rollCallPool(region).stream().filter(c -> c.difficulty() <= tier).map(Country::code).toList();
     }
 }

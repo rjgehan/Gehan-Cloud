@@ -116,8 +116,17 @@ A family geography game at `/globle`, after
 [globle-game.com](https://globle-game.com): one mystery country a day, the same for
 everyone, found by guessing countries and watching them light up hotter or colder on
 a globe. A home screen offers a second, Hard daily (a blind globe, no suggestions,
-rarer countries) beside it, and practice rounds: unlimited, by region, mainland only,
-or capital cities. Full detail in [Globle](docs/globle.md).
+rarer countries) beside it, practice rounds (unlimited, by region, mainland only, or
+capital cities), and Name them all: name every country you can, in the world or one
+continent, against a stopwatch, with the easy ones filled in if you like, on a board
+of its own. Name them all forgives spelling ("kyrigistan" counts as Kyrgyzstan, and a
+near miss asks "Did you mean Nauru?") but never counts a territory, a part of a
+country or a former name ("Greenland", "England", "Persia"), and afterwards a study
+page goes through the countries you missed: where each one is, and how often other
+players get it. A player can ask for a name to count, and the admin works through
+those requests from a quiet count on the home screen. The game is in English and
+Spanish, switched in the header, and accepts names typed in either language. Full
+detail in [Globle](docs/globle.md).
 
 **The daily answer cannot be known ahead of time.** The obvious design picks
 the day's country with a seeded shuffle of the date, and in a public repo that is a
@@ -184,7 +193,7 @@ needs no public address of its own either.
 | --- | --- |
 | Language / runtime | Java 21 |
 | Framework | Spring Boot 3.5 (Web, Security, Data JPA, Thymeleaf) |
-| Storage | SQLite, one table of users (plus Globle's three `globle_` tables) |
+| Storage | SQLite, one table of users (plus Globle's four `globle_` tables) |
 | Auth | Session form login, BCrypt hashing |
 | Container | Multi-stage Docker build, layered Spring Boot jar, multi-arch |
 | Ingress | Cloudflare Tunnel — nothing listens on the server's public interface |
@@ -202,8 +211,8 @@ needs no public address of its own either.
 | `GET` | `/users` | `ADMIN` | User management console |
 | `POST` | `/users`, `/users/{id}/delete`, `/{id}/reset`, `/{id}/role` | `ADMIN` | Create, delete, reset password, change role |
 | `GET` | `/globle` | authenticated | Globle, the optional game |
-| `GET` | `/globle/api/countries`, `/home`, `/daily`, `/unlimited/current?kind=`, `/leaderboard` | authenticated | Globle's JSON API: places, the home screen, today's games, a practice game in progress, standings |
-| `POST` | `/globle/api/daily/guess`, `/daily/give-up`, `/unlimited/new`, `/unlimited/{id}/guess`, `/unlimited/{id}/give-up` | authenticated | Globle's JSON API: play. CSRF token as a header; 401 JSON when signed out |
+| `GET` | `/globle/api/countries`, `/home`, `/daily`, `/unlimited/current?kind=`, `/rollcall/options`, `/rollcall/current`, `/rollcall/study`, `/leaderboard`, `/name-requests` | authenticated (`/name-requests`: `ADMIN`, 404 for anyone else) | Globle's JSON API: places (named in English and Spanish), the home screen, today's games, a practice game or Name them all run in progress, Name them all's choices and what a finished run missed, standings, and the name-change requests |
+| `POST` | `/globle/api/daily/guess`, `/daily/give-up`, `/unlimited/new`, `/unlimited/{id}/guess`, `/unlimited/{id}/give-up`, `/rollcall/new`, `/rollcall/{id}/name`, `/rollcall/{id}/finish`, `/name-requests`, `/name-requests/{id}/resolve` | authenticated (`/resolve`: `ADMIN`, 404 for anyone else) | Globle's JSON API: play, ask for a name to count, and close such a request. CSRF token as a header; 401 JSON when signed out |
 
 That is every route. The only API surface is Globle's, which exists only while the
 game is installed and answers only to a signed-in session.
@@ -285,7 +294,7 @@ deploy/casaos/       the same deployment as an importable CasaOS app
 | [Running it](docs/running.md) | Build, test, configure, add a tile, manage accounts |
 | [Networks and tiles](docs/networking.md) | Forward-auth, `lanOnly`, the two houses, which address the app believes |
 | [Deploying](docs/deploying.md) | The image, the server, CasaOS, the Cloudflare side, CI |
-| [Globle](docs/globle.md) | The game: modes, how it works, its data, removing it |
+| [Globle](docs/globle.md) | The game: modes, name-change requests, languages, how it works, its data, removing it |
 
 ## License
 

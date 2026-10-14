@@ -8,7 +8,9 @@
   },
   "scripts": {
     "build": "node build-data.mjs",
-    "check": "node check-data.mjs"
+    "check": "node check-data.mjs && node check-rollcall.mjs",
+    "check:i18n": "node check-i18n.mjs",
+    "check:rollcall": "node check-rollcall.mjs"
   },
   "dependencies": {
     "d3-geo": "3.1.1",

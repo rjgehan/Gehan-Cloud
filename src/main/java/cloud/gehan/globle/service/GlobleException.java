@@ -31,11 +31,15 @@ public class GlobleException extends RuntimeException {
         return new GlobleException(HttpStatus.BAD_REQUEST, "unknown-country");
     }
 
+    /** Already guessed in this game, or already named in this roll call run. */
     public static GlobleException alreadyGuessed() {
         return new GlobleException(HttpStatus.BAD_REQUEST, "already-guessed");
     }
 
-    /** The game has been won or given up; another device may have finished it. */
+    /**
+     * The game has been won or given up, or the roll call run is finished; another
+     * device may have ended it.
+     */
     public static GlobleException finished() {
         return new GlobleException(HttpStatus.BAD_REQUEST, "finished");
     }
@@ -45,11 +49,35 @@ public class GlobleException extends RuntimeException {
         return new GlobleException(HttpStatus.BAD_REQUEST, "no-capital");
     }
 
+    /**
+     * "Name them all" was sent a territory (Greenland, Puerto Rico...): a real place,
+     * but never one of the countries to name.
+     */
+    public static GlobleException notAnAnswer() {
+        return new GlobleException(HttpStatus.BAD_REQUEST, "not-an-answer");
+    }
+
+    /** "Name them all" was sent an answer country that is not in the run's region. */
+    public static GlobleException outsideRegion() {
+        return new GlobleException(HttpStatus.BAD_REQUEST, "outside-region");
+    }
+
     public static GlobleException badRequest() {
         return new GlobleException(HttpStatus.BAD_REQUEST, "bad-request");
     }
 
-    /** Also the answer for a game that exists but is someone else's: no hint either way. */
+    /**
+     * A player sent a "request a name change" while already having as many open as one
+     * player may (NameRequestService.MAX_OPEN_PER_PLAYER). Nothing was stored.
+     */
+    public static GlobleException tooMany() {
+        return new GlobleException(HttpStatus.BAD_REQUEST, "too-many");
+    }
+
+    /**
+     * Also the answer for a game that exists but is someone else's, and for the admin's
+     * name-request routes asked by anyone else: no hint either way.
+     */
     public static GlobleException notFound() {
         return new GlobleException(HttpStatus.NOT_FOUND, "not-found");
     }

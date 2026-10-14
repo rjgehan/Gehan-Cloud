@@ -88,6 +88,22 @@ class GlobleDisabledTest {
         mvc.perform(post("/globle/api/daily/guess").with(user("Jen").roles("USER")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"FRA\"}"))
                 .andExpect(status().is4xxClientError());
+        mvc.perform(get("/globle/api/rollcall/options").with(user("Jen").roles("USER")))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/globle/api/rollcall/new").with(user("Jen").roles("USER")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().is4xxClientError());
+        mvc.perform(get("/globle/api/rollcall/study").with(user("Jen").roles("USER")))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/globle/api/name-requests").with(user("admin").roles("ADMIN")))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/globle/api/name-requests").with(user("Jen").roles("USER")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"GBR\",\"suggestion\":\"Blighty\",\"lang\":\"en\",\"source\":\"other\"}"))
+                .andExpect(status().is4xxClientError());
+        mvc.perform(post("/globle/api/name-requests/1/resolve").with(user("admin").roles("ADMIN")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"done\"}"))
+                .andExpect(status().is4xxClientError());
     }
 
     /**

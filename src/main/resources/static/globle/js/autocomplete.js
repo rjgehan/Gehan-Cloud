@@ -10,6 +10,7 @@
 
 import { search, findExact } from "./match.js";
 import { flagEmoji } from "./format.js";
+import { t } from "./i18n.js";
 
 let uid = 0;
 
@@ -163,7 +164,7 @@ export class Autocomplete {
                 // A territory stays selectable: its distance still helps.
                 const tag = document.createElement("span");
                 tag.className = "gl-opt-tag";
-                tag.textContent = r.guessed ? "Guessed" : "Never the answer";
+                tag.textContent = t(r.guessed ? "ac.guessed" : "ac.neverAnswer");
                 li.append(tag);
             }
             list.append(li);

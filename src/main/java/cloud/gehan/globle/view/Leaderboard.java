@@ -12,7 +12,8 @@ import java.util.Map;
  *
  * <p>A request names one daily variant, classic or Hard; they are separate puzzles
  * with separate boards and streaks. Today, Week, All time and Me are that variant's.
- * The practice boards are always all three.
+ * The practice boards are always all three, and the "Name them all" board is always
+ * there too, whichever variant was asked for.
  *
  * @param variant   "classic" or "hard": which daily the daily sections describe
  * @param today     today's daily, as a race
@@ -20,9 +21,12 @@ import java.util.Map;
  * @param allTime   daily results ever
  * @param unlimited finished practice games, per kind and variant
  * @param me        the viewer's own daily record
+ * @param rollcall  "Name them all": whole-world runs that count (finished, with at least
+ *                  one name typed), one row per player, by most named, then fastest,
+ *                  then username
  */
 public record Leaderboard(String variant, Today today, List<WeekRow> week, List<AllTimeRow> allTime,
-                          Unlimited unlimited, Me me) {
+                          Unlimited unlimited, Me me, List<RollCallRow> rollcall) {
 
     /**
      * @param viewerFinished whether the viewer has won or given up today
@@ -64,5 +68,21 @@ public record Leaderboard(String variant, Today today, List<WeekRow> week, List<
     /** @param distribution daily wins by guess count, keyed "1".."6", "7-9", "10-14", "15+" */
     public record Me(int played, int wins, double winRate, Double avgGuesses, int currentStreak, int maxStreak,
                      Map<String, Integer> distribution) {
+    }
+
+    /**
+     * One player on the "Name them all" board, from their whole-world runs that count:
+     * finished, with at least one name typed. A run with nothing typed (ended empty, or
+     * only filled in) is left out of every field.
+     *
+     * @param played        whole-world runs that count
+     * @param best          most countries named in one of them, filled-in ones included
+     * @param total         the countries a whole-world run asks for (197)
+     * @param bestSeconds   how long that best run took; the fastest, when several share
+     *                      the best count
+     * @param bestAutoCount how many of that run's countries were filled in automatically
+     */
+    public record RollCallRow(String username, int played, int best, int total, long bestSeconds,
+                              int bestAutoCount, boolean you) {
     }
 }

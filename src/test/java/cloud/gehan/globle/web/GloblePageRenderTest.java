@@ -103,6 +103,41 @@ class GloblePageRenderTest extends GlobleTestBase {
         assertThat(words(dialog(html, "dlg-help"))).as("words in the help sheet, legend aside").isLessThanOrEqualTo(80);
     }
 
+    /**
+     * Name them all has its own panel, and its box is plain on purpose: a list of
+     * suggestions would give the countries away. No listbox, nothing for the browser,
+     * a password manager or the keyboard to complete or correct, and the phone's Enter
+     * key is a plain return ("enter", not "done", which may close the keyboard), so
+     * the keyboard stays up from one country to the next.
+     */
+    @Test
+    void nameThemAllHasItsOwnPanelWithAPlainBox() throws Exception {
+        String html = render("jen");
+        int start = html.indexOf("id=\"rc-panel\"");
+        assertThat(start).as("the Name them all panel").isPositive();
+        int end = html.indexOf("</section>", html.indexOf("id=\"rc-named-section\"", start));
+        String panel = html.substring(start, end);
+
+        assertThat(panel)
+                .contains("id=\"rc-input\" type=\"text\"")
+                .contains("autocomplete=\"off\"")
+                .contains("autocorrect=\"off\"")
+                .contains("spellcheck=\"false\"")
+                .contains("enterkeyhint=\"enter\"")
+                .contains("data-1p-ignore")
+                .contains("data-lpignore=\"true\"")
+                .doesNotContain("enterkeyhint=\"done\"")
+                .doesNotContain("listbox")
+                .doesNotContain("<datalist");
+        for (String region : List.of("world", "africa", "americas", "asia", "europe", "oceania")) {
+            assertThat(panel).as("region " + region).contains("data-region=\"" + region + "\"");
+        }
+        assertThat(panel).doesNotContain("data-region=\"mainland\"");
+        assertThat(html)
+                .contains("data-kind=\"rollcall\"")
+                .contains("id=\"stats-rollcall\"");
+    }
+
     @Test
     void thePageNeverCarriesTheDaysAnswer() throws Exception {
         days.saveAndFlush(new GlobleDay(DAY_ONE, "MNG", 1, clock.instant()));

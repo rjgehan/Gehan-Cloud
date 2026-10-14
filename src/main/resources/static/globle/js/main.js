@@ -14,6 +14,16 @@
 //
 // Hard (daily and practice) is the same game with a blind globe and a plain text
 // box: no suggestions, the name has to be typed exactly.
+//
+// Every word comes from i18n.js, in English or Spanish. The language can change in
+// place (the header chip, or the toggle in the welcome and help sheets): relocalize()
+// re-fills the template and redraws from the same state, so nothing is reloaded.
+// Place names come from the server in English and are shown in the page's language
+// by code (names.js), so every state goes through shown() before it is drawn.
+//
+// Name them all (#/all, #/all/<region>) is not a guessing game: it has its own panel
+// and its own controller, rollcall-view.js, which this file routes to, draws from
+// render() and feeds the globe, the country list and the session.
 
 import { api } from "./api.js";
 import { Globe } from "./globe.js";
@@ -22,23 +32,43 @@ import { buildIndex, findExact } from "./match.js";
 import { guessColor, legendGradient } from "./scale.js";
 import { shareText } from "./share.js";
 import { closestGuess, latestGuess, newGuess, highlightFor, ownRow } from "./stats.js";
-import { flagEmoji, formatDistance, formatCountdown, regionLabel, plural } from "./format.js";
+import { flagEmoji, formatDistance, formatCountdown, regionLabel } from "./format.js";
 import { getPref, setPref, getChoice } from "./prefs.js";
 import { celebrate } from "./celebrate.js";
+import { installTypingLayout } from "./typing.js";
+import { LANGS, t, tn, getLang, setLang, detectLang, onLangChange, applyTranslations, translateText } from "./i18n.js";
+import { placeName, localiseState } from "./names.js";
 import {
     HOME, VARIANTS, PRESETS, FEATURED, MORE_REGIONS, DAILY_LABELS,
     parseRoute, routeHash, sameRoute, dailyRoute, playRoute, routeInfo, isHard, accentFor,
-    presetFor, modeLabel, modeIcon, statusText, statusKind, resumeText,
+    presetFor, modeLabel, modeIcon, statusText, statusKind, resumeText, practiceName,
+    rollCallRoute, isRollCall, rollCallChipText, ROLLCALL_ICON,
+    isStudy, isPage,
 } from "./modes.js";
 import {
-    $, $$, el, icon, setupDialog, openDialog, confirmSheet, toast, announce,
+    $, $$, el, icon, setupDialog, openDialog, confirmSheet, toast, announce, copyText,
     renderGuesses, renderClosest, renderTiles, dailyTiles, renderDistribution,
-    renderToday, renderWeek, renderAllTime, renderUnlimited, unlimitedSummary,
+    renderToday, renderWeek, renderAllTime, renderUnlimited, unlimitedSummary, capitalWithCountry,
+    renderRollCallBoard, rollCallSummary,
 } from "./ui.js";
+import { RollCallView } from "./rollcall-view.js";
+import { StudyView } from "./study.js";
+import { NameRequests } from "./requests.js";
 
 const BOARD_TABS = ["today", "week", "all", "unlimited"];
-const BOARD_KINDS = ["country", "capital", "hard"];
-const PRACTICE_NAMES = { country: "Unlimited", capital: "Capitals", hard: "Hard practice" };
+const BOARD_KINDS = ["country", "capital", "hard", "rollcall"];
+
+// The reader's language before anything is drawn: their choice on this device, or
+// what their browser prefers. The template is English and hidden (html.gl-i18n-pending)
+// until this has run, so a Spanish reader never sees it flash; the CSS shows the page
+// anyway after a moment if this script never gets here. Whatever happens here, the
+// curtain lifts: English beats an empty page.
+try {
+    setLang(getChoice("lang", LANGS, detectLang()));
+    applyTranslations(document);
+} finally {
+    document.documentElement.classList.remove("gl-i18n-pending");
+}
 
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
@@ -75,6 +105,7 @@ const app = {
     units: getChoice("units", ["km", "mi"], "km"),
     busy: new Set(),        // route keys with a guess / give-up / new-game request in flight
     signedOut: false,
+    world: "loading",       // the globe's shapes: loading | failed | ready
     puzzle: Number(body.dataset.puzzle) || null,
     copiedTimer: 0,
     tipTimer: 0,
@@ -96,6 +127,7 @@ const dom = {
     presets: $("#presets"),
     more: $("#more-regions"),
     panel: $("#panel"),
+    rcPanel: $("#rc-panel"),
     stage: $("#stage"),
     canvas: $("#globe"),
     stageBlind: $("#stage-blind"),
@@ -128,6 +160,10 @@ const dom = {
     newAfter: $("#btn-new-after"),
     playHard: $("#btn-play-hard"),
     session: $("#session-banner"),
+    sessionText: $("#session-text"),
+    sessionLink: $("#session-link"),
+    langChip: $("#btn-lang"),
+    langChipLabel: $("#btn-lang-label"),
     welcome: $("#dlg-welcome"),
     help: $("#dlg-help"),
     stats: $("#dlg-stats"),
@@ -143,6 +179,75 @@ const globe = new Globe(dom.canvas, {
     onInteract: () => { dom.stageHint.hidden = true; },
 });
 
+// ------------------------------------------------------------------ Name them all
+
+const rollCall = new RollCallView({
+    globe,
+    coarsePointer,
+    reducedMotion,
+    confirmDialog: dom.confirm,
+    route: () => app.route,
+    nav: () => app.nav,
+    countries: () => app.countries,
+    byCode: () => app.byCode,
+    index: () => app.indexes.country,
+    countriesError: () => app.countriesError,
+    home: () => app.home,
+    homeStamp: () => app.homeStamp,
+    boardRow: () => {
+        const data = practiceSource().data;
+        return data ? ownRow(data.rollcall) : null;
+    },
+    signedOut: () => app.signedOut,
+    sessionExpired: (code) => showSessionExpired(code),
+    go: (route, options) => go(route, options),
+    openBoard: () => openBoardOn("unlimited", "rollcall"),
+    hideStageHint: () => { dom.stageHint.hidden = true; },
+    homeChanged: () => { if (onHome()) renderHome(); },
+    // A run ended: the home summary and the Name them all board changed.
+    runEnded: (region) => {
+        loadHome();
+        loadBoard(practiceSource().variant);
+        study.forget(region);
+    },
+    optionsChanged: (region) => { if (region === "world" && onHome()) renderHome(); },
+    requestButton: (code, source, ctx) => requests.button(code, source, ctx),
+});
+
+// ------------------------------------------------------------------ round 2: requests and study
+
+// "Request a name change" (its sheet, the admin's #/requests and home count) and
+// "Study what you missed" (#/all/study, #/all/<region>/study): their own modules,
+// routed to from here like Name them all.
+const requests = new NameRequests({
+    route: () => app.route,
+    byCode: () => app.byCode,
+    home: () => app.home,
+    recentTexts: (region, runId) => rollCall.recentUnrecognised(region, runId),
+    sessionExpired: (code) => showSessionExpired(code),
+    notAdmin: () => { if (isPage(app.route) && !isStudy(app.route)) replaceHome(); },
+    countChanged: () => loadHome(),
+});
+
+const study = new StudyView({
+    globe,
+    route: () => app.route,
+    byCode: () => app.byCode,
+    units: () => app.units,
+    sessionExpired: (code) => showSessionExpired(code),
+    requestButton: (code, source, ctx) => requests.button(code, source, ctx),
+    playAgain: (region) => {
+        rollCall.forgetFinished(region);
+        go(rollCallRoute(region));
+    },
+    hideStageHint: () => { dom.stageHint.hidden = true; },
+});
+
+/** The view drawing a page route (study or requests). */
+function pageView(route) {
+    return isStudy(route) ? study : requests;
+}
+
 // ------------------------------------------------------------------ guess box
 
 const autocomplete = new Autocomplete({
@@ -151,11 +256,9 @@ const autocomplete = new Autocomplete({
     onPick: (code) => guess(code),
     onType: clearError,
     onProblem: (kind, result) => {
-        if (kind === "already-guessed") showError(`You already guessed ${result.label}.`);
-        else if (kind === "choose") showError(`Did you mean ${result.label}? Pick it from the list, or press Enter again.`);
-        else showError(currentKind() === "capital"
-            ? "No capital matches that. Try another spelling."
-            : "No country matches that. Try another spelling.");
+        if (kind === "already-guessed") showError(t("error.already-guessed", { name: result.label }));
+        else if (kind === "choose") showError(t("guess.choose", { name: result.label }));
+        else showError(t(currentKind() === "capital" ? "guess.noCapital" : "guess.noCountry"));
     },
 });
 
@@ -189,9 +292,24 @@ function puzzleNumber() {
     return app.puzzle;
 }
 
+/** A place's name in the page's language, from the country list; its code until the list is here. */
 function countryName(code) {
     const c = app.byCode.get(code);
-    return c ? c.name : code;
+    return c ? placeName(c) : code;
+}
+
+/**
+ * A GameState as the page shows it: the server's English place names swapped for
+ * the page's language, by code. app.games keeps the server's own.
+ */
+function shown(state) {
+    return localiseState(state, app.byCode);
+}
+
+/** How a guess or answer is named in a sentence: "Spain", or "Madrid, Spain" in capitals mode. */
+function spokenName(place, kind) {
+    if (!place) return "";
+    return kind === "capital" && place.capital ? capitalWithCountry(place) : place.name;
 }
 
 /** A missing variant is classic: responses from before Hard existed. */
@@ -241,12 +359,8 @@ function clearError() {
     dom.input.removeAttribute("aria-invalid");
 }
 
-const TRANSPORT_MESSAGES = {
-    offline: "You seem to be offline, so nothing was sent. Try again once you're connected.",
-    timeout: "The server took too long to answer. Your game has been reloaded to be sure.",
-    server: "The server hit a problem. Try again in a moment.",
-    "bad-response": "The server sent something unexpected. Try reloading the page.",
-};
+/** Problems with the request itself, which any request can have; each has an error.<code> message. */
+const TRANSPORT_ERRORS = ["offline", "timeout", "server", "bad-response"];
 
 function isAuthError(error) {
     return !!error && (error.code === "signed-out" || error.code === "forbidden");
@@ -258,8 +372,9 @@ function handleCommonError(error, route = app.route) {
         showSessionExpired(error.code);
         return true;
     }
-    if (isOnScreen(route.key)) showError(TRANSPORT_MESSAGES[error && error.code] || "Something went wrong. Try again.");
-    if (error && error.code === "timeout" && route.key) reloadSlot(route);
+    const code = error && error.code;
+    if (isOnScreen(route.key)) showError(t(TRANSPORT_ERRORS.includes(code) ? `error.${code}` : "error.generic"));
+    if (code === "timeout" && route.key) reloadSlot(route);
     return true;
 }
 
@@ -269,13 +384,13 @@ function handleGameError(error, code, route = app.route) {
     const here = isOnScreen(route.key);
     switch (error && error.code) {
         case "unknown-country":
-            if (here) showError(kind === "capital" ? "That isn't a capital we know. Pick one from the list." : "That isn't a country we know.");
+            if (here) showError(t(kind === "capital" ? "error.unknown-capital" : "error.unknown-country"));
             break;
         case "already-guessed":
-            if (here) showError(`You already guessed ${countryName(code)}.`);
+            if (here) showError(t("error.already-guessed", { name: countryName(code) }));
             break;
         case "no-capital":
-            if (here) showError(`${countryName(code)} has no capital to guess. Try another.`);
+            if (here) showError(t("error.no-capital", { name: countryName(code) }));
             break;
         case "finished":
             // Not showError: the reload is about to hide the form it would land in.
@@ -283,12 +398,12 @@ function handleGameError(error, code, route = app.route) {
             if (here) {
                 clearError();
                 autocomplete.clear();
-                toast("That game already ended (maybe on another device). Loading your current one.", 3600);
+                toast(t("error.finished"), 3600);
             }
             reloadSlot(route);
             break;
         case "not-found":
-            if (here) toast("That game could not be found. Loading your current one.", 3600);
+            if (here) toast(t("error.not-found"), 3600);
             reloadSlot(route);
             break;
         case "new-day":
@@ -297,13 +412,13 @@ function handleGameError(error, code, route = app.route) {
             if (here) {
                 clearError();
                 autocomplete.clear();
-                toast("A new puzzle started at midnight. Nothing was counted.", 4000);
+                toast(t("error.new-day"), 4000);
             }
             reloadSlot(route);
             loadHome();
             break;
         case "bad-request":
-            if (here) showError("That didn't go through. Try again.");
+            if (here) showError(t("error.bad-request"));
             break;
         default:
             handleCommonError(error, route);
@@ -315,9 +430,10 @@ function showSessionExpired(reason = "signed-out") {
     if (app.signedOut) return;
     app.signedOut = true;
     if (reason === "forbidden") {
-        $("#session-text").textContent = "This page is out of date, so guesses can't be saved.";
-        const link = $("#session-link");
-        link.textContent = "Reload";
+        // New keys rather than new text, so a change of language keeps these words.
+        translateText(dom.sessionText, "session.stale");
+        const link = dom.sessionLink;
+        translateText(link, "common.reload");
         // The same route, for a new tab or a modified click.
         link.setAttribute("href", location.pathname + location.hash);
         link.addEventListener("click", (e) => {
@@ -332,7 +448,8 @@ function showSessionExpired(reason = "signed-out") {
     dom.session.hidden = false;
     autocomplete.setLocked(true);
     for (const b of [dom.go, dom.giveUp, dom.skip, dom.startBtn, dom.newAfter]) b.disabled = true;
-    announce("Your session has expired. Sign in again to keep playing.");
+    rollCall.lock();
+    announce(t("session.announce"));
 }
 
 function isBusy(key = app.route.key) {
@@ -364,24 +481,39 @@ function applyBusy() {
 function render({ fresh = null } = {}) {
     const route = app.route;
     const home = onHome();
+    const rc = isRollCall(route);
+    const page = isPage(route);   // round 2: the study page or the admin's requests
     body.dataset.view = home ? "home" : "game";
     body.dataset.accent = accentFor(route);
     dom.home.hidden = !home;
-    dom.panel.hidden = home;
+    dom.panel.hidden = home || rc || page;
+    dom.rcPanel.hidden = !rc;
+    study.dom.panel.hidden = !isStudy(route);
+    requests.dom.panel.hidden = !page || isStudy(route);
     dom.gameBar.hidden = home;
     // On home the globe is scenery: not a tab stop, and not announced as a control.
     dom.canvas.tabIndex = home ? -1 : 0;
     if (home) dom.canvas.setAttribute("aria-hidden", "true");
     else dom.canvas.removeAttribute("aria-hidden");
     // Blind while a Hard game is being played; once it is over the land comes back.
-    const shown = currentState();
-    dom.stageBlind.hidden = !isHard(route) || (!!shown && shown.status !== "PLAYING");
+    // (Not called "shown": that is the function that localises a state, used below.)
+    const onScreen = currentState();
+    dom.stageBlind.hidden = !isHard(route) || (!!onScreen && onScreen.status !== "PLAYING");
 
     const number = puzzleNumber();
     dom.titleTag.textContent = home && number ? `#${number}` : "";
 
     if (home) {
         renderHome();
+        syncGlobe();
+        return;
+    }
+
+    if (rc || page) {
+        dom.modeIcon.className = `bi ${modeIcon(route)}`;
+        dom.modeLabel.textContent = modeLabel(route);
+        if (rc) rollCall.render();
+        else pageView(route).render();
         syncGlobe();
         return;
     }
@@ -409,16 +541,16 @@ function render({ fresh = null } = {}) {
     const listLoading = !blocked && !app.indexes.country;
     dom.panelStatus.hidden = !(loading || failure || blocked || (playing && listLoading));
     if (blocked) {
-        const reload = el("button", { type: "button", class: "gl-btn gl-btn-sm" }, "Reload");
+        const reload = el("button", { type: "button", class: "gl-btn gl-btn-sm" }, t("common.reload"));
         reload.addEventListener("click", () => window.location.reload());
-        dom.panelStatus.replaceChildren(el("span", { text: "Couldn't load the country list. " }), reload);
+        dom.panelStatus.replaceChildren(el("span", { text: `${t("panel.listFailed")} ` }), reload);
     } else if (loading || (playing && listLoading)) {
         dom.panelStatus.replaceChildren(el("span", { class: "gl-spinner", "aria-hidden": "true" }),
-            loading ? " Loading your game…" : " Loading the country list…");
+            ` ${t(loading ? "panel.loadingGame" : "panel.loadingList")}`);
     } else if (failure) {
-        const retry = el("button", { type: "button", class: "gl-btn gl-btn-sm" }, "Try again");
+        const retry = el("button", { type: "button", class: "gl-btn gl-btn-sm" }, t("common.tryAgain"));
         retry.addEventListener("click", () => reloadSlot(route));
-        dom.panelStatus.replaceChildren(el("span", { text: "Couldn't load this game. " }), retry);
+        dom.panelStatus.replaceChildren(el("span", { text: `${t("panel.gameFailed")} ` }), retry);
     }
 
     dom.start.hidden = !none;
@@ -432,16 +564,20 @@ function render({ fresh = null } = {}) {
     dom.skip.hidden = info.daily;
 
     if (state) {
-        const answerCode = state.answer ? state.answer.code : null;
-        const latest = latestGuess(state.guesses);
-        renderClosest(dom.closest, { state, units: app.units, closest: closestGuess(state.guesses, answerCode) });
-        renderGuesses(dom.list, { state, units: app.units, latestCode: latest ? latest.code : null, fresh: !!fresh });
-        dom.count.textContent = String(state.guesses.length);
-        dom.empty.hidden = state.guesses.length > 0;
-        const capital = state.kind === "capital";
-        dom.input.placeholder = isHard(route) ? "Type a country, then Enter" : capital ? "Guess a capital…" : "Guess a country…";
-        $("#guess-label").textContent = capital ? "Guess a capital city" : "Guess a country";
-        autocomplete.setGuessed(state.guesses.map((g) => g.code));
+        const view = shown(state);
+        const answerCode = view.answer ? view.answer.code : null;
+        const latest = latestGuess(view.guesses);
+        renderClosest(dom.closest, { state: view, units: app.units, closest: closestGuess(view.guesses, answerCode) });
+        renderGuesses(dom.list, { state: view, units: app.units, latestCode: latest ? latest.code : null, fresh: !!fresh });
+        dom.count.textContent = String(view.guesses.length);
+        dom.empty.hidden = view.guesses.length > 0;
+        const capital = view.kind === "capital";
+        // Keyed, not just worded, so a later applyTranslations keeps the right ones.
+        const placeholder = isHard(route) ? "guess.placeholderHard" : capital ? "guess.placeholderCapital" : "guess.placeholder";
+        dom.input.setAttribute("data-i18n-placeholder", placeholder);
+        dom.input.placeholder = t(placeholder);
+        translateText($("#guess-label"), capital ? "guess.labelCapital" : "guess.label");
+        autocomplete.setGuessed(view.guesses.map((g) => g.code));
     }
 
     syncGlobe();
@@ -449,6 +585,8 @@ function render({ fresh = null } = {}) {
 
 /** The guess box for a route: a combobox, or (Hard) a plain text box with no suggestions. */
 function configureInput(route) {
+    // Name them all has its own plain box (rollcall-view.js); the study and requests pages have none.
+    if (isRollCall(route) || isPage(route)) return;
     const info = routeInfo(route);
     const hard = isHard(route);
     autocomplete.setIndex(info ? app.indexes[info.kind] : null);
@@ -456,9 +594,7 @@ function configureInput(route) {
     dom.input.setAttribute("autocapitalize", hard ? "off" : "words");
     dom.form.classList.toggle("is-plain", hard);
     dom.inputIcon.className = `bi ${hard ? "bi-keyboard" : "bi-search"} gl-combo-icon`;
-    dom.inputHelp.textContent = hard
-        ? "No suggestions in Hard: type the country's name and press Enter."
-        : "Type to see matching places, use the arrow keys to choose, and Enter to guess.";
+    translateText(dom.inputHelp, hard ? "guess.helpHard" : "guess.help");
 }
 
 function syncGlobe() {
@@ -468,12 +604,26 @@ function syncGlobe() {
         globe.setGame({ kind: "country", region: "world", guesses: [], status: "PLAYING" });
         return;
     }
+    if (isRollCall(route)) {
+        rollCall.syncGlobe();
+        return;
+    }
+    if (isStudy(route)) {
+        study.syncGlobe();
+        return;
+    }
+    if (isPage(route)) {
+        globe.setGame({ kind: "country", region: "world", guesses: [], status: "PLAYING" });
+        return;
+    }
     const info = routeInfo(route);
-    const state = app.games[route.key];
-    if (!state) {
+    const raw = app.games[route.key];
+    if (!raw) {
         globe.setGame({ kind: info.kind, region: info.region, guesses: [], status: "PLAYING" });
         return;
     }
+    // The globe labels the answer and capitals by name: in the page's language.
+    const state = shown(raw);
     const answerCode = state.status !== "PLAYING" && state.answer ? state.answer.code : null;
     const latest = latestGuess(state.guesses);
     globe.setGame({
@@ -498,6 +648,15 @@ function aimGlobe() {
         globe.focusRegion("world");
         return;
     }
+    if (isRollCall(app.route)) {
+        rollCall.aimGlobe();
+        return;
+    }
+    if (isPage(app.route)) {
+        if (isStudy(app.route)) study.aimGlobe();
+        else globe.focusRegion("world");
+        return;
+    }
     const state = currentState();
     if (state && state.status !== "PLAYING") {
         globe.flyTo(pointForAnswer(state));
@@ -518,7 +677,8 @@ function renderStart(route) {
     dom.startCopy.textContent = preset.sub;
 }
 
-function renderEnd(state) {
+function renderEnd(raw) {
+    const state = shown(raw);
     const won = state.status === "WON";
     const answer = state.answer || {};
     const capitalMode = state.kind === "capital";
@@ -527,19 +687,17 @@ function renderEnd(state) {
     dom.end.classList.toggle("is-gaveup", !won);
 
     $("#end-kicker").textContent = won
-        ? (state.guessCount === 1 ? "First try. Unreal!" : "You found it!")
-        : "The answer was";
+        ? t(state.guessCount === 1 ? "end.firstTry" : "end.found")
+        : t("end.answerWas");
     $("#end-flag").textContent = flagEmoji(answer.iso2);
     if (capitalMode && answer.capital) {
         $("#end-name").textContent = answer.capital.name;
-        $("#end-sub").textContent = `Capital of ${answer.name}`;
+        $("#end-sub").textContent = t("end.capitalOf", { name: answer.name });
     } else {
         $("#end-name").textContent = answer.name || "";
-        $("#end-sub").textContent = answer.capital ? `Capital: ${answer.capital.name}` : "";
+        $("#end-sub").textContent = answer.capital ? t("end.capital", { name: answer.capital.name }) : "";
     }
-    $("#end-count").textContent = won
-        ? `Found in ${plural(state.guessCount, "guess", "guesses")}`
-        : `Revealed after ${plural(state.guessCount, "guess", "guesses")}`;
+    $("#end-count").textContent = tn(won ? "end.foundIn" : "end.revealedAfter", state.guessCount);
 
     const daily = state.mode === "daily";
     $("#end-daily").hidden = !daily;
@@ -556,14 +714,14 @@ function renderEnd(state) {
         renderTiles($("#end-tiles"), dailyTiles(me));
         $("#end-tiles").classList.toggle("is-loading", !slot.data || !!slot.loading);
         renderDistribution($("#end-dist"), me ? me.distribution : null, highlightFor(state), {
-            empty: variant === "hard" ? "Win a Hard daily to start your chart." : undefined,
+            empty: variant === "hard" ? t("end.emptyHard") : undefined,
         });
         tickCountdown();
     } else {
         const kind = practiceKind(state);
         const source = practiceSource();
         $("#end-record").textContent = source.data
-            ? `Your ${PRACTICE_NAMES[kind]} record: ${unlimitedSummary(ownRow(practiceRows(source.data, kind)))}`
+            ? t("end.record", { name: practiceName(kind), summary: unlimitedSummary(ownRow(practiceRows(source.data, kind))) })
             : "";
     }
 }
@@ -644,10 +802,10 @@ function renderHome() {
         const card = dom.cards[variant];
         const summary = dailySummary(variant);
         const unknown = failed && !app.games[variant];
-        $("[data-number]", card).textContent = number ? `Daily #${number}` : "Daily";
+        $("[data-number]", card).textContent = number ? t("daily.number", { n: number }) : t("common.daily");
         const status = $("[data-status]", card);
         if (unknown) {
-            status.replaceChildren(el("span", { "aria-hidden": "true", text: "—" }), el("span", { class: "sr-only", text: "Status unknown" }));
+            status.replaceChildren(el("span", { "aria-hidden": "true", text: "—" }), el("span", { class: "sr-only", text: t("home.statusUnknown") }));
             status.className = "gl-daily-status is-unknown";
         } else {
             status.textContent = statusText(summary);
@@ -659,10 +817,20 @@ function renderHome() {
         const node = $("[data-streak]", card);
         node.classList.toggle("is-cold", !streak);
         node.replaceChildren(...(streak == null ? [] : [el("span", { "aria-hidden": "true", text: `\u{1F525} ${streak}` })]));
-        $("[data-streak-sr]", card).textContent = streak ? `, ${streak}-day streak` : "";
+        $("[data-streak-sr]", card).textContent = streak ? tn("daily.streakSr", streak) : "";
         card.classList.toggle("is-loading", !app.home && !app.homeError && !summary);
     }
     $("#home-error").hidden = !failed;
+    // Round 2: the admin's discreet count of name-change requests, after the credit line.
+    requests.renderHomeCounter(app.home);
+    // Name them all: the world run in progress, else the best whole-world run.
+    const rcChip = $("[data-rollcall-chip]", dom.home);
+    if (rcChip) {
+        const text = rollCallChipText(rollCall.homeSummary(app.home, app.homeStamp));
+        rcChip.hidden = !text;
+        rcChip.textContent = text;
+        rcChip.title = text;
+    }
     for (const link of $$("[data-preset]", dom.home)) {
         const summary = presetSummary(link.dataset.preset);
         const chip = $("[data-resume]", link);
@@ -677,7 +845,9 @@ function renderHome() {
     tickCountdown();
 }
 
+/** The preset rows and region chips, in the page's language. Run again after a change of language. */
 function buildHome() {
+    for (const chip of $$(".gl-more-chip", dom.more)) chip.remove();
     dom.presets.replaceChildren(...FEATURED.map((name) => {
         const p = PRESETS[name];
         return el("li", {},
@@ -688,7 +858,16 @@ function buildHome() {
                     el("span", { class: "gl-preset-sub", text: p.sub })),
                 el("span", { class: "gl-preset-resume", "data-resume": true, hidden: true }),
                 el("i", { class: "bi bi-chevron-right gl-preset-go", "aria-hidden": "true" })));
-    }));
+    }),
+        // Name them all, last in the list: a different kind of game, with its own colour.
+        el("li", {},
+            el("a", { class: "gl-preset is-rollcall", href: routeHash(rollCallRoute("world")), "data-route": true, "data-rollcall": true },
+                el("span", { class: "gl-preset-icon", "aria-hidden": "true" }, icon(ROLLCALL_ICON)),
+                el("span", { class: "gl-preset-text" },
+                    el("span", { class: "gl-preset-name", text: t("rollcall.name") }),
+                    el("span", { class: "gl-preset-sub", text: t("rollcall.sub") })),
+                el("span", { class: "gl-preset-resume", "data-rollcall-chip": true, hidden: true }),
+                el("i", { class: "bi bi-chevron-right gl-preset-go", "aria-hidden": "true" }))));
     for (const name of MORE_REGIONS) {
         dom.more.append(el("a", { class: "gl-more-chip", href: routeHash(playRoute(name)), "data-route": true, "data-preset": name },
             el("span", { text: regionLabel(PRESETS[name].region) }),
@@ -721,6 +900,8 @@ function loadHome() {
         }
         app.homeLoading = null;
         if (onHome()) render();
+        else if (isRollCall(app.route)) rollCall.render();   // its region picker marks runs in progress
+        else if (isPage(app.route)) requests.homeChanged();  // #/requests: a non-admin goes home
         else {
             const state = currentState();
             if (state && state.status !== "PLAYING") renderEnd(state);
@@ -802,9 +983,9 @@ async function refreshSlot(route) {
     setGame(key, fresh);
     if (!isOnScreen(key)) return;
     if (info.daily && before && fresh && before.puzzle !== fresh.puzzle) {
-        toast(`A new day has started. This is ${DAILY_LABELS[info.variant]} #${fresh.puzzle}.`, 4000);
+        toast(t("toast.newDay", { name: DAILY_LABELS[info.variant], n: fresh.puzzle }), 4000);
     } else if (!info.daily && before && before.status === "PLAYING" && !fresh) {
-        toast("That game ended on another device.", 3600);
+        toast(t("toast.endedElsewhere"), 3600);
     }
     clearError();
     render();
@@ -824,7 +1005,7 @@ async function refreshDaily(variant) {
     const after = app.games[variant];
     if (isOnScreen(variant) && before && after && before.puzzle != null && after.puzzle != null
             && before.puzzle !== after.puzzle) {
-        toast(`A new day has started. This is ${DAILY_LABELS[variant]} #${after.puzzle}.`, 4000);
+        toast(t("toast.newDay", { name: DAILY_LABELS[variant], n: after.puzzle }), 4000);
     }
     loadHome();
 }
@@ -847,9 +1028,10 @@ function newDay() {
 /**
  * Moves to a game route with a new history entry (or replacing this one). The
  * entry remembers whether it was pushed from home, so Home can be "back" rather
- * than piling up entries.
+ * than piling up entries. keepPlace (Name them all's region buttons) leaves focus
+ * and the scroll where they are, on the button just pressed.
  */
-function go(route, { replace = false } = {}) {
+function go(route, { replace = false, keepPlace = false } = {}) {
     if (!route || route.name === "home") {
         goHome();
         return;
@@ -857,7 +1039,7 @@ function go(route, { replace = false } = {}) {
     if (sameRoute(route, app.route)) return;
     if (replace) history.replaceState(history.state, "", routeHash(route));
     else history.pushState({ globle: onHome() ? "from-home" : "game" }, "", routeHash(route));
-    enterRoute(route);
+    enterRoute(route, { keepPlace });
 }
 
 function goHome() {
@@ -892,15 +1074,16 @@ function closeDialogs() {
     for (const dialog of $$("dialog[open]")) dialog.close("dismiss");
 }
 
-async function enterRoute(route, { initial = false } = {}) {
+async function enterRoute(route, { initial = false, keepPlace = false } = {}) {
     const nav = ++app.nav;
     app.route = route;
     if (!initial) {
         closeDialogs();
-        window.scrollTo(0, 0);
+        if (!keepPlace) window.scrollTo(0, 0);
     }
     clearError();
     hideTip();
+    rollCall.routeChanged(route);
     // The lock follows the game: free for this one even if another game's request
     // is still pending, and still on when coming back to the game that sent one.
     applyBusy();
@@ -911,7 +1094,28 @@ async function enterRoute(route, { initial = false } = {}) {
         globe.restartSpin();
         aimGlobe();
         loadHome();
+        // Name them all's row shows the best whole-world run.
+        rollCall.loadOptions("world");
         if (!initial) dom.homeTitle.focus({ preventScroll: true });
+        return;
+    }
+
+    if (isRollCall(route)) {
+        render();
+        aimGlobe();
+        // A region button keeps focus (and the scroll) on the row of regions, where
+        // its new pressed state is heard and the next one is a Tab away.
+        if (!initial && !keepPlace) dom.modeBadge.focus({ preventScroll: true });
+        await rollCall.enter(route, { initial });
+        return;
+    }
+
+    // Round 2: the study page and the admin's requests.
+    if (isPage(route)) {
+        render();
+        aimGlobe();
+        if (!initial) dom.modeBadge.focus({ preventScroll: true });
+        await pageView(route).enter(route, { initial });
         return;
     }
 
@@ -978,17 +1182,17 @@ function submitPlain() {
     // render() keeps the box hidden until the list is here; this is the backstop,
     // so a correct name is never called misspelled.
     if (!app.indexes.country) {
-        showError("Still loading the country list — try again in a moment.");
+        showError(t("guess.listLoading"));
         return;
     }
     const code = findExact(app.indexes.country, text);
     if (!code) {
-        showError("Not recognised — check the spelling");
+        showError(t("guess.notRecognised"));
         return;
     }
     const state = currentState();
     if (state && state.guesses.some((g) => g.code === code)) {
-        showError(`You already guessed ${countryName(code)}.`);
+        showError(t("error.already-guessed", { name: countryName(code) }));
         return;
     }
     guess(code);
@@ -1008,7 +1212,7 @@ function applyState(route, next, prev) {
     if (!isOnScreen(key)) return;
 
     if (next.mode === "daily" && prev && prev.puzzle != null && next.puzzle != null && prev.puzzle !== next.puzzle) {
-        toast(`A new day has started. This is ${DAILY_LABELS[variantOf(next)]} #${next.puzzle}.`, 4000);
+        toast(t("toast.newDay", { name: DAILY_LABELS[variantOf(next)], n: next.puzzle }), 4000);
     }
     render({ fresh: added ? added.code : null });
 
@@ -1018,29 +1222,31 @@ function applyState(route, next, prev) {
     }
     if (added) {
         globe.flyTo(pointForGuess(added, next.kind));
-        const closest = closestGuess(next.guesses, null);
+        const view = shown(next);
+        const latest = view.guesses.find((g) => g.code === added.code) || added;
+        const closest = closestGuess(view.guesses, null);
         // In capitals mode the distance is the capital's, so name the capital.
-        const label = (g) => (next.kind === "capital" && g.capital ? `${g.capital.name}, ${g.name}` : g.name);
-        let message = `${label(added)}: ${formatDistance(added.km, app.units)} away.`;
-        if (added.km === 0 && next.kind !== "capital") message += " It borders the mystery country.";
-        if (closest && closest.code !== added.code) message += ` Closest so far: ${label(closest)}, ${formatDistance(closest.km, app.units)}.`;
-        announce(message);
+        const parts = [t("announce.distance", { name: spokenName(latest, next.kind), distance: formatDistance(latest.km, app.units) })];
+        if (latest.km === 0 && next.kind !== "capital") parts.push(t("announce.borders"));
+        if (closest && closest.code !== latest.code) {
+            parts.push(t("announce.closest", { name: spokenName(closest, next.kind), distance: formatDistance(closest.km, app.units) }));
+        }
+        announce(parts.join(" "));
     }
 }
 
-function finishGame(state) {
+function finishGame(raw) {
+    const state = shown(raw);
     const won = state.status === "WON";
     const point = pointForAnswer(state);
     globe.flyTo(point);
-    const answerName = state.kind === "capital" && state.answer && state.answer.capital
-        ? `${state.answer.capital.name}, ${state.answer.name}`
-        : (state.answer ? state.answer.name : "");
+    const answerName = spokenName(state.answer, state.kind);
     if (won) {
         globe.pulse(point);
         celebrate({ reducedMotion });
-        announce(`Correct! It was ${answerName}. Found in ${plural(state.guessCount, "guess", "guesses")}.`);
+        announce(tn("announce.correct", state.guessCount, { name: answerName }));
     } else {
-        announce(`The answer was ${answerName}.`);
+        announce(t("announce.answerWas", { name: answerName }));
     }
     if (!coarsePointer) {
         const target = $("#btn-share");
@@ -1075,13 +1281,14 @@ async function giveUp() {
     if (isBusy(key) || app.signedOut || !state || state.status !== "PLAYING") return;
     const info = routeInfo(route);
     const streak = info.daily ? currentStreak(info.variant) : 0;
+    const daily = info.variant === "hard" ? "confirm.giveUp.hard" : "confirm.giveUp.daily";
     const ok = await confirmSheet(dom.confirm, {
-        title: "Give up?",
-        body: info.daily
-            ? `The answer will be revealed and today's ${info.variant === "hard" ? "Hard " : ""}puzzle counts as a loss${streak ? `, ending your ${streak}-day streak` : ""}.`
-            : "The answer will be revealed and this game counts as a loss.",
-        confirm: "Reveal the answer",
-        cancel: "Keep playing",
+        title: t("confirm.giveUp.title"),
+        body: !info.daily ? t("confirm.giveUp.practice")
+            : streak ? tn(`${daily}Streak`, streak)
+            : t(daily),
+        confirm: t("confirm.giveUp.ok"),
+        cancel: t("confirm.keepPlaying"),
         danger: true,
     });
     if (!ok || !isOnScreen(key)) return;
@@ -1132,7 +1339,7 @@ async function newGame() {
                 clearError();
                 render();
                 aimGlobe();
-                toast("You have a game in progress from another device.", 3600);
+                toast(t("toast.otherDevice"), 3600);
             }
             return false;
         }
@@ -1140,10 +1347,10 @@ async function newGame() {
     }
     if (abandoning) {
         const ok = await confirmSheet(dom.confirm, {
-            title: "Start a new game?",
-            body: `This one counts as given up after ${plural(state.guessCount, "guess", "guesses")}. The answer won't be shown.`,
-            confirm: "Start new game",
-            cancel: "Keep playing",
+            title: t("confirm.newGame.title"),
+            body: tn("confirm.newGame.body", state.guessCount),
+            confirm: t("confirm.newGame.ok"),
+            cancel: t("confirm.keepPlaying"),
         });
         if (!ok || !isOnScreen(key)) return false;
     }
@@ -1159,11 +1366,11 @@ async function newGame() {
             clearError();
             render();
             globe.focusRegion(next.region || region);
-            announce(`New ${modeLabel(route, { region: next.region })} game. Make your first guess.`);
+            announce(t("announce.newGame", { mode: modeLabel(route, { region: next.region }) }));
             if (!coarsePointer) dom.input.focus({ preventScroll: true });
         }
         if (abandoning) {
-            toast("Your last game counted as given up.");
+            toast(t("toast.lastGivenUp"));
             loadBoard("classic");
         }
         return true;
@@ -1187,8 +1394,7 @@ async function shareResult() {
     if (daily && app.boards[variant].loading) {
         await Promise.race([app.boards[variant].loading, new Promise((resolve) => setTimeout(resolve, 800))]);
     }
-    const streak = daily ? currentStreak(variant) : 0;
-    const text = shareText(state, { streak, site: `${window.location.host}/globle` });
+    const text = resultShareText(state);
 
     if (coarsePointer && typeof navigator.share === "function") {
         try {
@@ -1201,37 +1407,21 @@ async function shareResult() {
     }
     if (await copyText(text)) {
         const button = $("#btn-share-label");
-        button.textContent = "Copied!";
+        translateText(button, "end.copied");
         clearTimeout(app.copiedTimer);
-        app.copiedTimer = setTimeout(() => { button.textContent = "Share"; }, 2000);
-        toast("Copied! Paste it in the family chat.");
+        app.copiedTimer = setTimeout(() => translateText(button, "end.share"), 2000);
+        toast(t("toast.copied"));
     } else {
         // No window.prompt: show the text in the page, selected, ready to copy.
-        toast("Couldn't copy automatically. Select the text and copy it.", 4000);
+        toast(t("toast.copyFailed"), 4000);
         showShareFallback(text);
     }
 }
 
-async function copyText(text) {
-    try {
-        if (navigator.clipboard && window.isSecureContext) {
-            await navigator.clipboard.writeText(text);
-            return true;
-        }
-    } catch {
-        // fall back below
-    }
-    try {
-        const area = el("textarea", { class: "gl-offscreen", readonly: true, "aria-hidden": "true" });
-        area.value = text;
-        document.body.append(area);
-        area.select();
-        const ok = document.execCommand("copy");
-        area.remove();
-        return ok;
-    } catch {
-        return false;
-    }
+/** What Share gives for a finished game, in the page's language (Share and a language switch both ask). */
+function resultShareText(state) {
+    const streak = state.mode === "daily" ? currentStreak(variantOf(state)) : 0;
+    return shareText(state, { streak, site: `${window.location.host}/globle` });
 }
 
 function showShareFallback(text) {
@@ -1240,6 +1430,21 @@ function showShareFallback(text) {
     box.hidden = false;
     box.focus();
     box.select();
+}
+
+/**
+ * The language changed: a share box that is showing (copying failed) takes the new
+ * words, still ready to copy. Not focused or selected again: focus stays on the
+ * language control just pressed.
+ */
+function relocalizeShareFallback() {
+    const box = $("#share-fallback");
+    if (!box.hidden) {
+        const state = currentState();
+        if (state && state.status !== "PLAYING") box.value = resultShareText(state);
+        else box.hidden = true;
+    }
+    rollCall.relocalizeShare();
 }
 
 // ------------------------------------------------------------------ leaderboard & stats
@@ -1295,12 +1500,12 @@ function practiceRows(data, kind) {
 
 function boardPlaceholder(node, slot) {
     if (slot.error) {
-        const button = el("button", { type: "button", class: "gl-btn gl-btn-sm" }, "Try again");
+        const button = el("button", { type: "button", class: "gl-btn gl-btn-sm" }, t("common.tryAgain"));
         button.addEventListener("click", () => loadBoard(slot.variant));
-        node.replaceChildren(el("p", { class: "gl-muted gl-board-empty" }, "Couldn't load the leaderboard. ", button));
+        node.replaceChildren(el("p", { class: "gl-muted gl-board-empty" }, `${t("board.failed")} `, button));
     } else {
         node.replaceChildren(el("p", { class: "gl-muted gl-board-empty" },
-            el("span", { class: "gl-spinner", "aria-hidden": "true" }), " Loading…"));
+            el("span", { class: "gl-spinner", "aria-hidden": "true" }), ` ${t("common.loading")}`));
     }
 }
 
@@ -1330,7 +1535,9 @@ function renderBoard() {
             boardPlaceholder(panel, slot);
             return;
         }
-        renderUnlimited(panel, practiceRows(slot.data, app.boardKind), app.boardKind);
+        // Name them all's board rides along in every leaderboard response.
+        if (app.boardKind === "rollcall") renderRollCallBoard(panel, slot.data.rollcall);
+        else renderUnlimited(panel, practiceRows(slot.data, app.boardKind), app.boardKind);
         return;
     }
     const slot = app.boards[app.boardVariant];
@@ -1338,12 +1545,11 @@ function renderBoard() {
         boardPlaceholder(panel, slot);
         return;
     }
-    const hard = app.boardVariant === "hard";
-    const what = hard ? "Hard dailies" : "Daily puzzles";
+    const variant = app.boardVariant;
     switch (app.boardTab) {
-        case "week": renderWeek(panel, slot.data.week, { what }); break;
-        case "all": renderAllTime(panel, slot.data.allTime, { what }); break;
-        default: renderToday(panel, slot.data.today, { name: hard ? "Hard" : "Puzzle" });
+        case "week": renderWeek(panel, slot.data.week, { variant }); break;
+        case "all": renderAllTime(panel, slot.data.allTime, { variant }); break;
+        default: renderToday(panel, slot.data.today, { variant });
     }
 }
 
@@ -1356,6 +1562,7 @@ function renderStats() {
     for (const [id, kind] of [["#stats-unlimited", "country"], ["#stats-capitals", "capital"], ["#stats-hard", "hard"]]) {
         $(id).textContent = practice ? unlimitedSummary(ownRow(practiceRows(practice, kind))) : "";
     }
+    $("#stats-rollcall").textContent = practice ? rollCallSummary(ownRow(practice.rollcall)) : "";
     if (!slot.data) {
         boardPlaceholder($("#stats-dist"), slot);
         renderTiles(tiles, dailyTiles(null));
@@ -1367,7 +1574,7 @@ function renderStats() {
     renderTiles(tiles, dailyTiles(me));
     const today = app.games[variant];
     renderDistribution($("#stats-dist"), me ? me.distribution : null, highlightFor(today), {
-        empty: variant === "hard" ? "Win a Hard daily to start your chart." : undefined,
+        empty: variant === "hard" ? t("end.emptyHard") : undefined,
     });
 }
 
@@ -1392,6 +1599,20 @@ function openBoard() {
     loadBoard(app.boardVariant);
 }
 
+/** Opens the leaderboard on one tab and practice board for this one viewing (Name them all's end card asks for its own). */
+function openBoardOn(tab, kind) {
+    app.boardTab = tab;
+    if (kind) app.boardKind = kind;
+    // Not the player's choice: once the sheet closes, go back to what they last picked
+    // (tab and sub-tab clicks still save their own prefs while it is open), so the
+    // other end cards and the header's trophy open where they always did.
+    dom.board.addEventListener("close", () => {
+        app.boardTab = getChoice("boardTab", BOARD_TABS, "today");
+        app.boardKind = getChoice("boardKind", BOARD_KINDS, "country");
+    }, { once: true });
+    openBoard();
+}
+
 function openStats() {
     const variant = dailyOnScreen();
     if (variant) app.statsVariant = variant;
@@ -1407,29 +1628,41 @@ function hideTip() {
     dom.tip.hidden = true;
 }
 
-function showTip(hit) {
-    clearTimeout(app.tipTimer);
-    const state = currentState();
-    if (!hit || !state) {
-        dom.tip.hidden = true;
-        return;
-    }
+/**
+ * What the tooltip says about a place on the globe, { iso2, title, detail }, or
+ * null for nothing: only a guess, or the answer once the game is over (and in
+ * Name them all, only a country already named, or missed once the run is over).
+ */
+function tipFor(hit) {
+    if (isRollCall(app.route)) return rollCall.tipFor(hit.code);
+    if (isPage(app.route)) return isStudy(app.route) ? study.tipFor(hit.code) : null;
+    const raw = currentState();
+    if (!raw) return null;
+    const state = shown(raw);
     const answer = state.status !== "PLAYING" ? state.answer : null;
     const g = state.guesses.find((x) => x.code === hit.code);
     const isAnswer = !!answer && hit.code === answer.code;
-    let title;
-    let iso2;
     if (g) {
-        iso2 = g.iso2;
-        title = state.kind === "capital" && g.capital ? `${g.capital.name}, ${g.name}` : g.name;
-    } else if (isAnswer) {
-        iso2 = answer.iso2;
-        title = state.kind === "capital" && answer.capital ? `${answer.capital.name}, ${answer.name}` : answer.name;
-    } else {
+        return {
+            iso2: g.iso2,
+            title: spokenName(g, state.kind),
+            detail: isAnswer ? t(state.status === "WON" ? "tip.answerFound" : "tip.answer") : formatDistance(g.km, app.units),
+        };
+    }
+    if (isAnswer) {
+        return { iso2: answer.iso2, title: spokenName(answer, state.kind), detail: t(state.status === "WON" ? "tip.answerFound" : "tip.answer") };
+    }
+    return null;
+}
+
+function showTip(hit) {
+    clearTimeout(app.tipTimer);
+    const tip = hit ? tipFor(hit) : null;
+    if (!tip) {
         dom.tip.hidden = true;
         return;
     }
-    const detail = isAnswer ? (state.status === "WON" ? "The answer!" : "The answer") : formatDistance(g.km, app.units);
+    const { iso2, title, detail } = tip;
     dom.tip.replaceChildren(
         el("span", { "aria-hidden": "true", text: flagEmoji(iso2) }),
         el("span", { class: "gl-tip-name", text: title }),
@@ -1445,10 +1678,81 @@ function showTip(hit) {
     if (hit.tap) app.tipTimer = setTimeout(hideTip, 2600);
 }
 
+// ------------------------------------------------------------------ language
+
+function renderStageHint() {
+    dom.stageHint.textContent = t(coarsePointer ? "stage.hintTouch" : "stage.hintMouse");
+}
+
+/**
+ * The switches show where they lead: the header chip names the other language in
+ * that language ("ES", "Cambiar a español"), and the toggles in the welcome and
+ * help sheets mark the one in use.
+ */
+function syncLanguageControls() {
+    const lang = getLang();
+    const other = lang === "es" ? "en" : "es";
+    const label = t("lang.switchTo", null, other);
+    dom.langChip.setAttribute("lang", other);
+    dom.langChip.title = label;
+    dom.langChip.setAttribute("aria-label", label);
+    dom.langChip.dataset.lang = other;
+    dom.langChipLabel.textContent = t("lang.code", null, other);
+    for (const b of $$(".gl-lang-toggle [data-lang]")) {
+        b.setAttribute("aria-pressed", b.dataset.lang === lang ? "true" : "false");
+    }
+}
+
+/** Remembers the reader's choice on this device and redraws the page in it (relocalize). */
+function switchLanguage(lang) {
+    if (!LANGS.includes(lang) || lang === getLang()) return;
+    setPref("lang", lang);
+    setLang(lang);
+}
+
+/**
+ * The page in the new language, from the same state: the template's words, the
+ * home rows, the search index (whose labels are place names), the view on screen,
+ * the open sheets and the globe's labels. A tooltip in the old language just goes;
+ * a toast already showing runs out its few seconds as it was. Anything new that
+ * draws words must be redrawn from here too.
+ */
+function relocalize() {
+    applyTranslations(document);
+    syncLanguageControls();
+    renderStageHint();
+    renderWorldStatus();
+    hideTip();
+    buildHome();
+    if (app.countries.length) {
+        app.indexes.country = buildIndex(app.countries, "country", getLang());
+        app.indexes.capital = buildIndex(app.countries, "capital", getLang());
+    }
+    if (!onHome()) {
+        // A new index clears the box; what was typed is kept.
+        const typed = dom.input.value;
+        configureInput(app.route);
+        dom.input.value = typed;
+    }
+    clearError();
+    render();
+    renderBoard();
+    renderStats();
+    relocalizeShareFallback();
+    requests.relocalize();
+    announce(t("lang.changed"));
+}
+
 // ------------------------------------------------------------------ wiring
 
 function wire() {
-    dom.stageHint.textContent = coarsePointer ? "Drag to spin · pinch to zoom" : "Drag to spin · scroll to zoom";
+    renderStageHint();
+    syncLanguageControls();
+    onLangChange(relocalize);
+    dom.langChip.addEventListener("click", () => switchLanguage(dom.langChip.dataset.lang));
+    for (const b of $$(".gl-lang-toggle [data-lang]")) {
+        b.addEventListener("click", () => switchLanguage(b.dataset.lang));
+    }
     buildHome();
 
     // In-page links (home cards, presets, Home, Back home) move between views
@@ -1579,7 +1883,12 @@ function wire() {
         if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
         const target = e.target;
         if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
-        if (document.querySelector("dialog[open]") || onHome() || dom.form.hidden) return;
+        if (document.querySelector("dialog[open]") || onHome()) return;
+        if (isRollCall(app.route)) {
+            if (rollCall.focusInput()) e.preventDefault();
+            return;
+        }
+        if (dom.form.hidden || isPage(app.route)) return;
         e.preventDefault();
         dom.input.focus();
     });
@@ -1622,6 +1931,9 @@ function wire() {
         app.touched = {};
         app.home = null;
         app.homeStamp = -1;
+        rollCall.reset();
+        study.reset();
+        requests.reset();
         const route = parseRoute(location.hash) || HOME;
         enterRoute(route, { initial: true });
     });
@@ -1629,12 +1941,25 @@ function wire() {
 
 // ------------------------------------------------------------------ start
 
+/** The line over the globe while its shapes load, or after they failed to. */
+function renderWorldStatus() {
+    dom.stageStatus.hidden = app.world === "ready";
+    if (app.world === "loading") {
+        dom.stageStatus.replaceChildren(el("span", { class: "gl-spinner", "aria-hidden": "true" }), ` ${t("stage.loading")}`);
+    } else if (app.world === "failed") {
+        const retry = el("button", { type: "button", class: "gl-btn gl-btn-sm" }, t("common.tryAgain"));
+        retry.addEventListener("click", () => loadWorld());
+        dom.stageStatus.replaceChildren(el("span", { text: `${t("stage.failed")} ` }), retry);
+    }
+}
+
 async function loadWorld() {
-    dom.stageStatus.hidden = false;
-    dom.stageStatus.replaceChildren(el("span", { class: "gl-spinner", "aria-hidden": "true" }), " Loading the world…");
+    app.world = "loading";
+    renderWorldStatus();
     try {
         globe.setWorld(await api.world());
-        dom.stageStatus.hidden = true;
+        app.world = "ready";
+        renderWorldStatus();
         syncGlobe();
         aimGlobe();
     } catch (error) {
@@ -1642,9 +1967,8 @@ async function loadWorld() {
             showSessionExpired(error.code);
             return;
         }
-        const retry = el("button", { type: "button", class: "gl-btn gl-btn-sm" }, "Try again");
-        retry.addEventListener("click", () => loadWorld());
-        dom.stageStatus.replaceChildren(el("span", { text: "Couldn't load the globe. " }), retry);
+        app.world = "failed";
+        renderWorldStatus();
     }
 }
 
@@ -1656,6 +1980,8 @@ function welcomeOnce() {
 
 async function start() {
     wire();
+    // On a phone, the globe stays in view above the keyboard while a guess is typed.
+    installTypingLayout({ stage: dom.stage });
     const initial = parseRoute(location.hash);
     if (!initial) history.replaceState(null, "", location.pathname + location.search);
     app.route = initial || HOME;
@@ -1677,9 +2003,13 @@ async function start() {
         return;
     }
     for (const c of app.countries) app.byCode.set(c.code, c);
-    app.indexes.country = buildIndex(app.countries, "country");
-    app.indexes.capital = buildIndex(app.countries, "capital");
-    if (!onHome()) {
+    // The language decides which name an option shows; both languages' names match.
+    app.indexes.country = buildIndex(app.countries, "country", getLang());
+    app.indexes.capital = buildIndex(app.countries, "capital", getLang());
+    if (isRollCall(app.route)) {
+        // The box appears only now; focus it if the player picked this route after loading.
+        rollCall.countriesReady({ focus: app.nav > 1 });
+    } else if (!onHome()) {
         configureInput(app.route);
         render();
         // The guess box appears only now. If the player picked this game after the

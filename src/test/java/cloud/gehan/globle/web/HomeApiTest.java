@@ -22,7 +22,8 @@ class HomeApiTest extends GlobleTestBase {
 
         List<String> fields = new ArrayList<>();
         home.fieldNames().forEachRemaining(fields::add);
-        assertThat(fields).containsExactly("puzzle", "date", "nextPuzzleAt", "classic", "hard", "inProgress");
+        assertThat(fields).containsExactly("puzzle", "date", "nextPuzzleAt", "classic", "hard", "inProgress",
+                "rollcall", "admin", "nameRequests");
         assertThat(home.get("puzzle").asInt()).isEqualTo(1);
         assertThat(home.get("date").asText()).isEqualTo("2026-10-09");
         assertThat(home.get("nextPuzzleAt").asText()).isEqualTo("2026-10-10T00:00:00-04:00");
@@ -33,10 +34,27 @@ class HomeApiTest extends GlobleTestBase {
             assertThat(daily.get("currentStreak").asInt()).isZero();
         }
         assertThat(home.get("inProgress")).isEmpty();
+        assertThat(home.get("rollcall")).isEmpty();
+        assertThat(home.get("admin").asBoolean()).isFalse();
+        assertThat(home.get("nameRequests").isNull()).isTrue();
 
         assertThat(games.count()).isZero();
         assertThat(days.count()).isZero();
         assertThat(hardDays.count()).isZero();
+    }
+
+    /** The admin's home is the same, plus how many name requests are open; it draws no answer either. */
+    @Test
+    void anAdminsHomeAddsTheOpenNameRequestCount() throws Exception {
+        var boss = admin("boss");
+        JsonNode home = home(boss);
+        assertThat(home.get("admin").asBoolean()).isTrue();
+        assertThat(home.get("nameRequests").asInt()).isZero();
+        assertThat(home.get("classic").get("status").asText()).isEqualTo("NEW");
+        assertThat(games.count()).isZero();
+        assertThat(days.count()).isZero();
+        assertThat(hardDays.count()).isZero();
+        assertThat(nameRequests.count()).isZero();
     }
 
     @Test

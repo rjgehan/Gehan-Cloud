@@ -28,6 +28,7 @@
     --green-soft: #86efac;
     --amber: #ffb648;
     --violet: #b48cff;
+    --rollcall: #2dd4bf;
     --hard: #ff5c8a;
     --classic: #57cc72;
     --red-soft: #ffb4ae;
@@ -39,6 +40,7 @@
 body[data-accent="unlimited"] { --accent: var(--amber); }
 body[data-accent="capitals"] { --accent: var(--violet); }
 body[data-accent="hard"] { --accent: var(--hard); }
+body[data-accent="rollcall"] { --accent: var(--rollcall); }
 
 *,
 *::before,
@@ -142,6 +144,23 @@ kbd {
 
 .gl-muted { color: var(--text-dim); }
 .gl-small { font-size: 12.5px; }
+
+/* --- language ------------------------------------------------------------- */
+/* The template is English. Until main.js has put the page into the reader's
+   language and removed html.gl-i18n-pending, the app stays hidden (the sky and
+   background still show), so a Spanish reader never sees English flash first.
+   Hidden must never mean stuck: if the script fails or never runs, the animation
+   shows the page anyway after 1.5 s. Reduced motion shortens only the duration,
+   not the delay, so it still waits. visibility keeps the layout, so the globe
+   measures its real size behind the curtain. */
+html.gl-i18n-pending .gl-app {
+    visibility: hidden;
+    animation: gl-i18n-reveal .01s linear 1.5s forwards;
+}
+
+@keyframes gl-i18n-reveal {
+    to { visibility: visible; }
+}
 
 /* --- layout --------------------------------------------------------------- */
 .gl-app {
@@ -251,6 +270,18 @@ kbd {
     padding: 0;
     flex: none;
 }
+
+/* The language switch: the other language's code ("ES" / "EN"), one tap away. */
+.gl-lang-chip {
+    flex: none;
+    gap: 5px;
+    padding: 0 12px 0 11px;
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: .04em;
+}
+
+.gl-lang-chip i { font-size: 15px; }
 
 /* --- game bar ------------------------------------------------------------ */
 .gl-gamebar {
@@ -400,13 +431,18 @@ kbd {
     transform: translate(-50%, -50%);
     display: flex;
     align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
     gap: 10px;
+    /* One line where it fits; a longer message (Spanish) wraps rather than spill off a phone. */
+    width: max-content;
+    max-width: calc(100% - 24px);
     padding: 10px 16px;
-    border-radius: 999px;
+    border-radius: 22px;
     background: rgba(6, 14, 24, .78);
     border: 1px solid var(--line);
     font-size: 13.5px;
-    white-space: nowrap;
+    text-align: center;
 }
 
 .gl-tip {
@@ -1368,6 +1404,7 @@ body[data-view="home"] .gl-stage-hint { display: none; }
 
 .gl-preset.is-capitals { --c: var(--violet); }
 .gl-preset.is-hard { --c: var(--hard); }
+.gl-preset.is-rollcall { --c: var(--rollcall); }
 
 @media (hover: hover) {
     .gl-preset:hover {
@@ -1478,6 +1515,503 @@ body[data-view="home"] .gl-stage-hint { display: none; }
 
 .gl-home .gl-credit { margin-top: 2px; }
 
+/* --- Name them all (#/all) -------------------------------------------------- */
+/* The setup card, the run being typed (a big counter, the stopwatch, a plain box),
+   the end card, and the names by continent: green as they are on the globe,
+   hatched for the ones missed, as a revealed answer is. */
+.gl-rc-setup,
+.gl-rc-play {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.gl-rc-heading {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--accent);
+}
+
+.gl-rc-lede {
+    font-size: 14px;
+    color: var(--text-dim);
+}
+
+.gl-rc-setup .gl-section { margin-top: 2px; }
+
+/* One row of regions above everything else; on a phone it scrolls sideways
+   rather than take two lines from the box. */
+.gl-rc-regions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+@media (max-width: 559.98px) {
+    .gl-rc-where {
+        margin: 0 -16px;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .gl-rc-where::-webkit-scrollbar { display: none; }
+
+    .gl-rc-regions {
+        flex-wrap: nowrap;
+        width: max-content;
+        padding: 2px 16px;
+    }
+
+    .gl-rc-regions button { flex: none; }
+}
+
+.gl-rc-regions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 34px;
+    padding: 0 13px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 600;
+    transition: background .15s ease, border-color .15s ease;
+}
+
+.gl-rc-regions button[aria-pressed="true"] {
+    color: var(--text);
+    background: rgba(45, 212, 191, .2);
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    border-color: rgba(45, 212, 191, .6);
+    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+/* A run in progress in that region. */
+.gl-rc-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--rollcall);
+    box-shadow: 0 0 6px var(--rollcall);
+}
+
+.gl-rc-fill {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    border: 0;
+}
+
+.gl-rc-fill legend {
+    margin-bottom: 6px;
+    padding: 0;
+}
+
+.gl-rc-opt {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, .03);
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+}
+
+.gl-rc-opt:has(input:checked) {
+    border-color: rgba(45, 212, 191, .65);
+    border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+    background: rgba(45, 212, 191, .12);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.gl-rc-opt:has(input:focus-visible) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+}
+
+.gl-rc-opt input {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-top: 3px;
+    accent-color: var(--accent);
+}
+
+.gl-rc-opt-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.gl-rc-opt-name {
+    font-size: 14.5px;
+    font-weight: 600;
+}
+
+.gl-rc-opt-n {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: var(--glass-2);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.gl-rc-opt-n:empty,
+.gl-rc-opt-note:empty { display: none; }
+
+.gl-rc-opt-note {
+    font-size: 12.5px;
+    color: var(--text-dim);
+}
+
+.gl-rc-opt.is-disabled { cursor: not-allowed; }
+
+/* Dim the control and its name, not the note: the note says why it is closed. */
+.gl-rc-opt.is-disabled input,
+.gl-rc-opt.is-disabled .gl-rc-opt-name { opacity: .55; }
+
+.gl-rc-best {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    color: var(--text-dim);
+}
+
+/* Empty, it stays rendered (a live region) but takes no room, not even the gap. */
+.gl-rc-setup .gl-error:empty { margin: -12px 0 0; }
+
+.gl-rc-score {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+}
+
+.gl-rc-counter {
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Focused by script (after Start on a touch screen), never by Tab: no ring, like .gl-mode. */
+.gl-rc-counter:focus { outline: none; }
+
+.gl-rc-count {
+    font-size: 44px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    transition: opacity .2s ease;
+}
+
+.gl-rc-of {
+    margin: 0 5px;
+    font-size: 22px;
+    color: var(--text-faint);
+}
+
+.gl-rc-total {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-dim);
+}
+
+/* A name on its way to the server. */
+.gl-rc-counter.is-saving .gl-rc-count { opacity: .8; }
+
+.gl-rc-clock {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.gl-rc-clock i { color: var(--accent); }
+
+/* Always there (a live region), one line high so the page does not jump as it fills. */
+.gl-rc-feedback {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 1.5em;
+    margin-top: 8px;
+    padding-left: 4px;
+    font-size: 14.5px;
+    font-weight: 500;
+}
+
+.gl-rc-feedback.is-problem {
+    font-size: 13.5px;
+    font-weight: 400;
+    color: var(--red-soft);
+}
+
+.gl-rc-tick {
+    font-weight: 700;
+    color: var(--green);
+}
+
+.gl-rc-fb-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* "(from “kyrigistan”)": what the spell check read the name from. */
+.gl-rc-fb-from {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 400;
+    color: var(--text-faint);
+}
+
+/* "Did you mean [🇳🇷 Nauru]?": one or two countries to tap. The line may grow to two
+   rows; typing.js re-measures it, so it stays above a phone's keyboard. */
+.gl-rc-feedback.is-suggest {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    font-weight: 400;
+    color: var(--text-dim);
+}
+
+.gl-rc-dym-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
+    max-width: 100%;
+    padding: 0 12px;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    background: var(--glass-2);
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color .15s ease, transform .15s ease;
+}
+
+/* The "?" sits against the last button, not a gap away. */
+.gl-rc-dym-end { margin-left: -4px; }
+
+.gl-rc-dym-btn > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.gl-rc-dym-btn:hover { background: var(--glass-hover); }
+.gl-rc-dym-btn:active { transform: scale(.96); }
+
+.gl-rc-dym-btn:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+}
+
+.gl-rc-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.gl-rc-progress > .gl-section { padding: 0 4px; }
+
+.gl-rc-bars {
+    list-style: none;
+    display: grid;
+    gap: 6px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--glass);
+}
+
+.gl-rc-bar-row {
+    display: grid;
+    grid-template-columns: 78px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+}
+
+.gl-rc-bar-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-dim);
+}
+
+.gl-rc-bar-track {
+    display: block;
+    height: 10px;
+    overflow: hidden;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, .08);
+}
+
+.gl-rc-bar {
+    display: block;
+    width: calc(var(--w, 0) * 100%);
+    height: 100%;
+    border-radius: inherit;
+    background-image: linear-gradient(90deg, #16a34a, var(--green));
+    transition: width .4s ease;
+}
+
+.gl-rc-bar-n {
+    min-width: 46px;
+    text-align: right;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.gl-rc-bar-row.is-full .gl-rc-bar-n { color: var(--green-soft); }
+
+.gl-rc-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.gl-rc-list > .gl-section { padding: 0 4px; }
+
+.gl-rc-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.gl-rc-group + .gl-rc-group { margin-top: 6px; }
+
+.gl-rc-group-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 0 4px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.gl-rc-group-n {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+.gl-rc-names {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.gl-rc-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 4px 10px 4px 8px;
+    border: 1px solid rgba(34, 197, 94, .38);
+    border-radius: 999px;
+    background: rgba(34, 197, 94, .13);
+    font-size: 13.5px;
+}
+
+.gl-rc-flag {
+    flex: none;
+    font-size: 16px;
+    line-height: 1;
+}
+
+.gl-rc-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Filled in at the start: the deeper green the globe uses for them, and a mark. */
+.gl-rc-name.is-auto {
+    border-color: rgba(21, 128, 61, .5);
+    background: rgba(21, 128, 61, .16);
+    color: var(--text-dim);
+}
+
+.gl-rc-auto {
+    font-size: 11px;
+    color: var(--green-soft);
+}
+
+.gl-rc-name.is-saving {
+    border-style: dashed;
+    opacity: .65;
+}
+
+.gl-rc-name.is-latest { border-color: var(--green-soft); }
+
+.gl-rc-name.is-new {
+    border-color: var(--green-soft);
+    animation: gl-rc-new 1.6s ease-out;
+}
+
+@keyframes gl-rc-new {
+    0% {
+        transform: scale(1.08);
+        box-shadow: 0 0 0 2px var(--green), 0 0 18px var(--green);
+    }
+    100% {
+        transform: none;
+        box-shadow: 0 0 0 0 transparent;
+    }
+}
+
+.gl-rc-names.is-missed .gl-rc-name {
+    border: 1px dashed rgba(134, 239, 172, .5);
+    background: repeating-linear-gradient(135deg, rgba(34, 197, 94, .14) 0 6px, transparent 6px 12px);
+}
+
+.gl-rc-end-title {
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -.01em;
+}
+
+.gl-rc-end-meta {
+    font-size: 14px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.gl-rc-end-note {
+    font-size: 13.5px;
+    color: var(--text-dim);
+}
+
+.gl-rc-end-note.is-best {
+    font-weight: 600;
+    color: var(--amber);
+}
+
 /* --- welcome --------------------------------------------------------------- */
 .gl-welcome {
     align-items: center;
@@ -1525,6 +2059,14 @@ body[data-view="home"] .gl-stage-hint { display: none; }
 .gl-toggle button[aria-pressed="true"] {
     background: rgba(255, 255, 255, .16);
     color: var(--text);
+}
+
+/* English | Español in the welcome and help sheets: as wide as its two words. */
+.gl-lang-toggle { align-self: center; }
+
+.gl-lang-toggle button {
+    flex: 0 0 auto;
+    padding: 0 16px;
 }
 
 /* --- dialogs / sheets ----------------------------------------------------- */
@@ -1664,6 +2206,7 @@ dialog[open] .gl-sheet-body { animation: gl-sheet-up .3s cubic-bezier(.2, .9, .3
 .gl-rule-icon.is-classic { color: var(--classic); background: rgba(87, 204, 114, .16); }
 .gl-rule-icon.is-hard { color: var(--hard); background: rgba(255, 92, 138, .16); }
 .gl-rule-icon.is-unlimited { color: var(--amber); background: rgba(255, 182, 72, .16); }
+.gl-rule-icon.is-rollcall { color: var(--rollcall); background: rgba(45, 212, 191, .16); }
 
 .gl-rules li { align-items: center; }
 
@@ -1966,15 +2509,28 @@ dialog[open] .gl-sheet-body { animation: gl-sheet-up .3s cubic-bezier(.2, .9, .3
 }
 
 /* --- breakpoints ---------------------------------------------------------- */
+/* Four chips in the header: below 480px the language chip is just its code and
+   the logo steps aside, so "Globle #12" keeps its room. */
+@media (max-width: 480px) {
+    .gl-logo { display: none; }
+    .gl-lang-chip { width: 40px; padding: 0; }
+    .gl-lang-chip i { display: none; }
+}
+
 @media (max-width: 400px) {
     .gl-logo { display: none; }
     .gl-stage-hint { max-width: calc(100% - 128px); white-space: normal; text-align: center; }
     .gl-title { font-size: 20px; gap: 8px; }
     .gl-logo { width: 30px; height: 30px; font-size: 16px; }
     .gl-top-actions { gap: 4px; }
-    .gl-chip-icon { width: 38px; height: 38px; }
+    .gl-chip-icon,
+    .gl-lang-chip { width: 38px; height: 38px; }
     .gl-g { gap: 8px; padding: 9px 10px; }
     .gl-tile-value { font-size: 17px; }
+    .gl-rc-count { font-size: 38px; }
+    .gl-rc-of,
+    .gl-rc-total { font-size: 19px; }
+    .gl-rc-bar-row { grid-template-columns: 66px minmax(0, 1fr) auto; gap: 8px; }
 }
 
 /* Below the desktop layout the home globe is a hero above the cards: shorter,
@@ -2025,6 +2581,15 @@ dialog[open] .gl-sheet-body { animation: gl-sheet-up .3s cubic-bezier(.2, .9, .3
 /* Four leaderboard tabs share a 320px phone; "Unlimited" needs the room. */
 @media (max-width: 360px) {
     .gl-tabs [role="tab"] { padding: 0 4px; font-size: 12px; }
+    /* Back, the title and four chips on one line. */
+    .gl-top { gap: 8px; }
+    .gl-top-actions { gap: 3px; }
+    .gl-chip-icon,
+    .gl-lang-chip { width: 36px; height: 36px; }
+    /* Five leaderboard columns (the Spanish headings are longer) without a sideways scroll. */
+    .gl-table th,
+    .gl-table td { padding-left: 5px; padding-right: 5px; }
+    .gl-table thead th { letter-spacing: .02em; }
 }
 
 @media (min-width: 640px) {
@@ -2110,4 +2675,402 @@ dialog[open] .gl-sheet-body { animation: gl-sheet-up .3s cubic-bezier(.2, .9, .3
         animation-duration: 1.6s !important;
         animation-iteration-count: infinite !important;
     }
+}
+
+/* --- typing on a phone ---------------------------------------------------- */
+/* While a guess box has the on-screen keyboard open (typing.js decides, from the
+   visual viewport), the app is pinned to exactly the part of the screen above the
+   keyboard, with only the globe and the box in it: the globe is what a guess is
+   read against, so it must not scroll away while the player types. typing.js
+   sets the sizes; without them nothing here applies (body.gl-typing is only set
+   with them). The desktop layout already keeps both in view. */
+@media (max-width: 959.98px) {
+    body.gl-typing .gl-app {
+        position: fixed;
+        top: var(--gl-vv-top, 0px);
+        left: 0;
+        right: 0;
+        height: var(--gl-vv-h, 100%);
+        z-index: 1;
+        overflow: hidden;
+        padding: max(8px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
+        grid-template-areas:
+            "stage"
+            "panel";
+        grid-template-rows: auto 1fr;
+        align-content: start;
+        row-gap: 8px;
+    }
+
+    /* Out of the way until the keyboard closes: nothing here is needed to type. */
+    body.gl-typing .gl-top,
+    body.gl-typing .gl-gamebar,
+    body.gl-typing .gl-stage-hint,
+    body.gl-typing .gl-practice,
+    body.gl-typing .gl-rc-where { display: none !important; }
+
+    body.gl-typing .gl-stage {
+        height: var(--gl-typing-stage-h, 40svh);
+        min-height: 0;
+        max-height: none;
+        border-radius: 20px;
+    }
+
+    body.gl-typing .gl-panel { gap: 8px; }
+    body.gl-typing .gl-rc-play { padding-top: 12px; }
+
+    /* The keyboard is below the box, so suggestions open upwards, over the globe. */
+    body.gl-typing .gl-options {
+        top: auto;
+        bottom: calc(100% + 6px);
+        max-height: var(--gl-typing-list-h, 40svh);
+    }
+}
+
+/* --- round 2: requests and study --- */
+/* "Request a name change" (requests.js): a quiet pencil beside every country listed in
+   Name them all and on every study card, the sheet it opens, the admin's #/requests
+   page and the admin's count on home. "Study what you missed" (study.js): the cards
+   of the last game's missed countries. */
+
+/* The pencil: small and muted, so a list of names stays a list of names; a 26px
+   target all the same (WCAG 2.2 asks for 24). */
+.gl-req-btn {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    margin: -4px -7px -4px -2px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-faint);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease;
+}
+
+.gl-req-btn:hover,
+.gl-req-btn:focus-visible {
+    background: var(--glass-hover);
+    color: var(--text);
+}
+
+/* Home: "✎ 3" after the credit line, for the admin only. Not a button, not a badge. */
+.gl-req-count {
+    margin-left: 6px;
+    color: var(--text-faint);
+    font-size: 11px;
+    text-decoration: none;
+    font-variant-numeric: tabular-nums;
+}
+
+.gl-req-count:hover,
+.gl-req-count:focus-visible { color: var(--text-dim); text-decoration: underline; }
+
+/* The setup card's "Study your last game", under Start. */
+.gl-rc-study-link {
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.gl-rc-study-link:hover span { text-decoration: underline; }
+
+/* --- the request sheet */
+.gl-request-flag { margin-right: 2px; }
+
+.gl-request-label {
+    margin-bottom: -6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+}
+
+.gl-request-input {
+    width: 100%;
+    height: 50px;
+    padding: 0 16px;
+    border: 1px solid var(--line-strong);
+    border-radius: 16px;
+    background: rgba(4, 12, 20, .6);
+    color: var(--text);
+    /* 16px or more stops iOS zooming the page on focus */
+    font-size: 17px;
+    font-weight: 500;
+    caret-color: var(--accent);
+}
+
+.gl-request-input::placeholder { color: var(--text-faint); }
+
+.gl-request-input:focus {
+    outline: none;
+    border-color: var(--focus);
+    box-shadow: 0 0 0 3px rgba(140, 196, 255, .25);
+}
+
+.gl-request-input[aria-invalid="true"] { border-color: var(--red-soft); }
+.gl-request-input[readonly] { opacity: .75; }
+
+.gl-request-picks {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.gl-sheet-body .gl-request-picks-label { font-size: 13px; }
+
+.gl-request-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.gl-request-chip {
+    max-width: 100%;
+    min-height: 32px;
+    padding: 4px 12px;
+    overflow: hidden;
+    border: 1px dashed var(--line-strong);
+    border-radius: 999px;
+    background: var(--glass);
+    color: var(--text);
+    font-size: 13.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.gl-request-chip:hover { background: var(--glass-hover); }
+
+/* Empty, it stays rendered (a live region) but takes no room, not even the gap. */
+.gl-request .gl-error { margin-top: -6px; }
+.gl-request .gl-error:empty { margin: -14px 0 0; }
+
+#request-send.is-busy { opacity: .7; }
+
+/* --- the study page */
+.gl-study-head {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.gl-study-title {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--accent);
+}
+
+.gl-study-summary { font-size: 14.5px; }
+
+.gl-study-hint {
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+.gl-study-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.gl-study-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--glass);
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+}
+
+.gl-study-card:hover { background: rgba(255, 255, 255, .08); }
+
+.gl-study-card.is-selected {
+    border-color: color-mix(in srgb, var(--green) 70%, transparent);
+    background: rgba(34, 197, 94, .1);
+}
+
+.gl-study-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.gl-study-top .gl-req-btn { margin: 0 -6px 0 auto; }
+
+.gl-study-heading {
+    flex: 1;
+    min-width: 0;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.gl-study-show {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    min-height: 32px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.gl-study-flag {
+    flex: none;
+    font-size: 22px;
+    line-height: 1;
+}
+
+.gl-study-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gl-study-aim {
+    flex: none;
+    font-size: 13px;
+    color: var(--text-faint);
+}
+
+.gl-study-card.is-selected .gl-study-aim,
+.gl-study-show:hover .gl-study-aim { color: var(--green-soft); }
+
+.gl-study-facts {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 13.5px;
+    color: var(--text-dim);
+}
+
+.gl-study-facts li {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.gl-study-facts .gl-study-where { color: var(--text); }
+
+.gl-study-icon {
+    flex: none;
+    width: 14px;
+    font-size: 12.5px;
+    color: var(--text-faint);
+}
+
+.gl-study-more { align-self: center; }
+
+/* --- the admin's requests */
+.gl-req-head {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.gl-req-title {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.gl-req-lede {
+    font-size: 13.5px;
+    color: var(--text-dim);
+}
+
+.gl-req-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.gl-req-tools [aria-pressed="true"] {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.gl-req-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.gl-req-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--glass);
+}
+
+.gl-req-item.is-done,
+.gl-req-item.is-dismissed { opacity: .72; }
+
+.gl-req-place {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.gl-req-flag { font-size: 20px; line-height: 1; }
+
+.gl-req-code {
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: var(--glass-2);
+    font: 600 11.5px/1.4 ui-monospace, Menlo, Consolas, monospace;
+    color: var(--text-dim);
+}
+
+.gl-req-suggestion {
+    font-size: 16px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.gl-req-cleaned {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--amber);
+}
+
+.gl-req-meta,
+.gl-req-state {
+    font-size: 12.5px;
+    color: var(--text-faint);
+    overflow-wrap: anywhere;
+}
+
+.gl-req-state { color: var(--text-dim); }
+
+.gl-req-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 2px;
 }

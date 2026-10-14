@@ -13,10 +13,14 @@ import java.util.Optional;
 
 /**
  * What the home screen shows: today's classic and Hard dailies as the player left
- * them, their streaks, and the practice games they can resume.
+ * them, their streaks, and the practice games and "Name them all" runs they can
+ * resume. The two lists are separate: a roll call run is never a practice game.
  *
- * <p>Read-only. It never draws a day's answer, so opening the home screen before
- * anyone has played leaves nothing stored, as looking at a daily always has.
+ * <p>Read-only for a player. It never draws a day's answer, so opening the home screen
+ * before anyone has played leaves nothing stored, as looking at a daily always has.
+ * The admin's also counts the open "request a name change"s, and counting them closes
+ * the ones the data already names (NameRequestService), so the count is what is really
+ * left to do.
  */
 @Service
 @ConditionalOnProperty(prefix = "globle", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -30,17 +34,23 @@ public class HomeService {
     private final DailyPuzzles puzzles;
     private final GameViews views;
     private final GlobleClock clock;
+    private final RollCallPools rollCallPools;
+    private final NameRequestService nameRequests;
 
     public HomeService(GlobleGameRepository games, LeaderboardService leaderboard, DailyPuzzles puzzles,
-                       GameViews views, GlobleClock clock) {
+                       GameViews views, GlobleClock clock, RollCallPools rollCallPools,
+                       NameRequestService nameRequests) {
         this.games = games;
         this.leaderboard = leaderboard;
         this.puzzles = puzzles;
         this.views = views;
         this.clock = clock;
+        this.rollCallPools = rollCallPools;
+        this.nameRequests = nameRequests;
     }
 
-    public Home home(Player player) {
+    /** @param admin whether the session has the admin role; only then is {@code nameRequests} counted */
+    public Home home(Player player, boolean admin) {
         LocalDate today = clock.today();
         return new Home(
                 puzzles.puzzleNumber(today),
@@ -51,7 +61,13 @@ public class HomeService {
                 games.findPlaying(player).stream()
                         .map(game -> new Home.InProgress(game.getId(), game.getKind().api(), game.getRegion().api(),
                                 game.getVariant().api(), game.getGuessCount()))
-                        .toList());
+                        .toList(),
+                games.findRollCallsPlaying(player).stream()
+                        .map(run -> new Home.RollCall(run.getId(), run.getRegion().api(), run.getGuessCount(),
+                                rollCallPools.pool(run.getRegion()).size()))
+                        .toList(),
+                admin,
+                admin ? nameRequests.openCount() : null);
     }
 
     private Home.Daily daily(Player player, LocalDate today, Variant variant) {

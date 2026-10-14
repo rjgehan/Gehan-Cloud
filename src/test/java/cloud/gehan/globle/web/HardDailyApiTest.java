@@ -205,7 +205,8 @@ class HardDailyApiTest extends GlobleTestBase {
         JsonNode first = json.readTree(body).get(0);
         List<String> fields = new ArrayList<>();
         first.fieldNames().forEachRemaining(fields::add);
-        assertThat(fields).containsExactly("code", "name", "iso2", "aliases", "region", "canBeAnswer", "capital");
+        assertThat(fields).containsExactly(
+                "code", "name", "nameEs", "iso2", "aliases", "aliasesEs", "region", "canBeAnswer", "capital");
     }
 
     @Test

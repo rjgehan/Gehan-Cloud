@@ -1,6 +1,9 @@
 package cloud.gehan.globle;
 
+import cloud.gehan.globle.model.Autofill;
+import cloud.gehan.globle.model.GlobleGame;
 import cloud.gehan.globle.model.Variant;
+import cloud.gehan.globle.repository.GlobleGameRepository;
 import cloud.gehan.globle.service.DailyPuzzles;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,11 +44,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Production's database predates Hard. This boots the app, as production does
+ * Production's database may predate Hard. This boots the app, as production does
  * ({@code ddl-auto=update} on SQLite), on a file holding exactly what the first
  * release of Globle (59ea8d8) created: its schema, copied from a database that release
- * built, and the kinds of rows it wrote. The upgrade may only add - the variant column
- * and the Hard table - and every old game must carry on as the classic game it was.
+ * built, and the kinds of rows it wrote. The upgrade may only add - the variant column,
+ * the Hard table, and roll call's two nullable columns - and every old game must carry
+ * on as the classic game it was. {@link HardReleaseUpgradeTest} does the same from the
+ * Hard release's schema.
  */
 @SpringBootTest(properties = {
         "globle.enabled=true",
@@ -124,6 +129,9 @@ class LiveDatabaseUpgradeTest {
     @Autowired
     private DailyPuzzles puzzles;
 
+    @Autowired
+    private GlobleGameRepository games;
+
     private final RequestPostProcessor jen = user("jen").roles("USER");
     private final RequestPostProcessor colleen = user("colleen").roles("USER");
 
@@ -133,13 +141,17 @@ class LiveDatabaseUpgradeTest {
     }
 
     @Test
-    void theUpgradeOnlyAddsAColumnAndATable() {
+    void theUpgradeOnlyAddsNullableColumnsAndTables() {
         List<Map<String, Object>> columns = jdbc.queryForList("pragma table_info(globle_game)");
+        // The three missing columns are added at the end, in Hibernate's (alphabetical) order.
         assertThat(columns).extracting(c -> c.get("name")).containsExactly(
                 "id", "answer_code", "daily_key", "finished_at", "guess_count", "guesses", "kind", "mode",
-                "puzzle_date", "region", "started_at", "status", "user_id", "username", "variant");
-        Map<String, Object> variant = columns.get(columns.size() - 1);
-        assertThat(((Number) variant.get("notnull")).intValue()).isZero();
+                "puzzle_date", "region", "started_at", "status", "user_id", "username",
+                "autofill", "autofill_count", "variant");
+        for (Map<String, Object> added : columns.subList(columns.size() - 3, columns.size())) {
+            assertThat(((Number) added.get("notnull")).intValue()).as("%s", added.get("name")).isZero();
+            assertThat(added.get("dflt_value")).as("%s", added.get("name")).isNull();
+        }
         assertThat(jdbc.queryForObject("select sql from sqlite_master where name = 'globle_game'", String.class))
                 .contains("daily_key varchar(128) unique").contains("primary key (id)");
 
@@ -151,11 +163,74 @@ class LiveDatabaseUpgradeTest {
                 .contains("primary key (puzzle_date)");
         assertThat(jdbc.queryForList("select name from sqlite_master where type = 'table' order by name"))
                 .extracting(r -> r.get("name"))
-                .containsExactly("globle_day", "globle_game", "globle_hard_day", "users");
+                .containsExactly("globle_day", "globle_game", "globle_hard_day", "globle_name_request", "users");
+
+        // The name requests' table is new: created whole, its two empty-while-open columns nullable.
+        List<Map<String, Object>> requestColumns = jdbc.queryForList("pragma table_info(globle_name_request)");
+        assertThat(requestColumns).extracting(c -> c.get("name")).containsExactlyInAnyOrder(
+                "id", "user_id", "username", "code", "suggestion", "lang", "source", "created_at", "status",
+                "resolved_at", "resolved_by");
+        assertThat(requestColumns).filteredOn(c -> ((Number) c.get("notnull")).intValue() == 0)
+                .extracting(c -> c.get("name")).containsExactlyInAnyOrder("id", "resolved_at", "resolved_by");
+        // Plain columns only: no CHECK constraint (enums go through converters) and no index or foreign key.
+        assertThat(jdbc.queryForObject("select sql from sqlite_master where name = 'globle_name_request'", String.class))
+                .doesNotContainIgnoringCase("check").doesNotContainIgnoringCase("references")
+                .contains("primary key (id)");
+        assertThat(jdbc.queryForObject("select count(*) from sqlite_master where tbl_name = 'globle_name_request'"
+                + " and type = 'index' and sql is not null", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from globle_name_request", Integer.class)).isZero();
 
         // Nothing rewrote the old rows.
         assertThat(jdbc.queryForObject("select count(*) from globle_game where variant is null and id <= 6",
                 Integer.class)).isEqualTo(6);
+        assertThat(jdbc.queryForObject("select count(*) from globle_game"
+                + " where autofill is null and autofill_count is null and id <= 6", Integer.class)).isEqualTo(6);
+        GlobleGame old = games.findById(4L).orElseThrow();
+        assertThat(old.getAutofill()).isEqualTo(Autofill.OFF);
+        assertThat(old.getAutofillCount()).isNull();
+        assertThat(old.autoCount()).isZero();
+        assertThat(old.guessCodes()).containsExactly("JPN", "BRA", "AUS");
+    }
+
+    /**
+     * "Name them all" works on the upgraded file, in the new columns, and touches none
+     * of the old games. Only Jen plays it, and no other test here looks at roll call,
+     * so the order the tests run in does not matter.
+     */
+    @Test
+    void nameThemAllWorksBesideTheOldGames() throws Exception {
+        JsonNode started = postOk("/globle/api/rollcall/new", "{\"region\":\"world\",\"autofill\":\"easy\"}", jen);
+        long id = started.get("id").asLong();
+        assertThat(id).isGreaterThan(6);
+        assertThat(started.get("autoCount").asInt()).isEqualTo(30);
+        assertThat(jdbc.queryForMap("select mode, kind, region, variant, status, autofill, autofill_count,"
+                + " answer_code, daily_key from globle_game where id = ?", id))
+                .containsEntry("mode", "ROLLCALL").containsEntry("kind", "COUNTRY").containsEntry("region", "WORLD")
+                .containsEntry("variant", "CLASSIC").containsEntry("status", "PLAYING")
+                .containsEntry("autofill", "EASY").containsEntry("autofill_count", 30)
+                .containsEntry("answer_code", null).containsEntry("daily_key", null);
+
+        JsonNode named = postOk("/globle/api/rollcall/" + id + "/name", "{\"code\":\"MNG\"}", jen);
+        assertThat(named.get("namedCount").asInt()).isEqualTo(31);
+        assertThat(getOk("/globle/api/home", jen).get("rollcall").get(0).get("id").asLong()).isEqualTo(id);
+        assertThat(getOk("/globle/api/home", jen).get("inProgress")).extracting(g -> g.get("id").asLong())
+                .containsExactly(4L);
+        // The old practice game's id is not a roll call run, nor the run a practice game.
+        mvc.perform(post("/globle/api/rollcall/4/finish").with(jen).with(csrf()))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/globle/api/unlimited/" + id + "/give-up").with(jen).with(csrf()))
+                .andExpect(status().isNotFound());
+
+        JsonNode finished = postOk("/globle/api/rollcall/" + id + "/finish", null, jen);
+        assertThat(finished.get("status").asText()).isEqualTo("FINISHED");
+        JsonNode board = getOk("/globle/api/leaderboard", jen);
+        assertThat(board.get("rollcall")).hasSize(1);
+        assertThat(board.get("rollcall").get(0).get("username").asText()).isEqualTo("jen");
+        assertThat(board.get("rollcall").get(0).get("best").asInt()).isEqualTo(31);
+        assertThat(board.get("me").get("played").asInt()).isEqualTo(2);
+        assertThat(board.get("unlimited").get("country")).hasSize(1);
+        assertThat(board.get("unlimited").get("country").get(0).get("played").asInt()).isEqualTo(1);
+        assertThat(getOk("/globle/api/rollcall/options?region=world", jen).get("finishedRuns").asInt()).isEqualTo(1);
     }
 
     @Test
@@ -211,8 +286,57 @@ class LiveDatabaseUpgradeTest {
                 .isEqualTo("3/colleen/2026-10-09/HARD");
     }
 
+    /**
+     * "Request a name change" and "Study what you missed" on the upgraded file. Only the
+     * name requests' new table is written, and the roll call run is in Oceania by the
+     * admin, which no other test here looks at.
+     */
+    @Test
+    void nameRequestsAndTheStudyWorkOnTheUpgradedFile() throws Exception {
+        RequestPostProcessor admin = user("admin").roles("ADMIN");
+        JsonNode sent = json.readTree(mvc.perform(post("/globle/api/name-requests").with(jen).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"GBR\",\"suggestion\":\"Great Britain and NI\",\"lang\":\"en\","
+                                + "\"source\":\"missed\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        mvc.perform(post("/globle/api/name-requests").with(jen).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"DEU\",\"suggestion\":\"Deutschland\",\"lang\":\"es\","
+                                + "\"source\":\"study\"}"))
+                .andExpect(status().isCreated());
+        mvc.perform(get("/globle/api/name-requests").with(jen)).andExpect(status().isNotFound());
+
+        JsonNode open = getOk("/globle/api/name-requests", admin);
+        assertThat(open).hasSize(1);
+        assertThat(open.get(0)).isEqualTo(sent);
+        assertThat(getOk("/globle/api/home", admin).get("nameRequests").asInt()).isEqualTo(1);
+        assertThat(getOk("/globle/api/home", jen).get("nameRequests").isNull()).isTrue();
+        assertThat(postOk("/globle/api/name-requests/" + sent.get("id").asLong() + "/resolve",
+                "{\"status\":\"done\"}", admin).get("resolvedBy").asText()).isEqualTo("admin");
+        assertThat(jdbc.queryForList("select code, status, resolved_by from globle_name_request order by id"))
+                .extracting(r -> r.get("code") + "/" + r.get("status") + "/" + r.get("resolved_by"))
+                .containsExactly("GBR/DONE/admin", "DEU/DONE/data");
+
+        long run = postOk("/globle/api/rollcall/new", "{\"region\":\"oceania\"}", admin).get("id").asLong();
+        postOk("/globle/api/rollcall/" + run + "/name", "{\"code\":\"AUS\"}", admin);
+        postOk("/globle/api/rollcall/" + run + "/finish", null, admin);
+        JsonNode study = getOk("/globle/api/rollcall/study?region=oceania", admin);
+        assertThat(study.get("runId").asLong()).isEqualTo(run);
+        assertThat(study.get("missedCount").asInt()).isEqualTo(13);
+        assertThat(study.get("missed").get(0).get("sampleRuns").asInt()).isEqualTo(1);
+    }
+
     private JsonNode getOk(String url, RequestPostProcessor who) throws Exception {
         return json.readTree(mvc.perform(get(url).with(who)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+    }
+
+    private JsonNode postOk(String url, String body, RequestPostProcessor who) throws Exception {
+        var request = post(url).with(who).with(csrf()).contentType(MediaType.APPLICATION_JSON);
+        if (body != null) {
+            request = request.content(body);
+        }
+        return json.readTree(mvc.perform(request).andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString());
     }
 

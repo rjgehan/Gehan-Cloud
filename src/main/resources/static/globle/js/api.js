@@ -137,6 +137,41 @@ export const api = {
     guessUnlimited: (id, code) => request("POST", `${BASE}/unlimited/${encodeURIComponent(id)}/guess`, { code }),
     giveUpUnlimited: (id) => request("POST", `${BASE}/unlimited/${encodeURIComponent(id)}/give-up`),
 
-    /** Today / Week / All time / me for one daily variant, plus every practice board. */
+    /**
+     * Today / Week / All time / me for one daily variant, plus every practice board
+     * and Name them all's (rollcall: whole-world runs, the same for either variant).
+     */
     leaderboard: (variant) => request("GET", `${BASE}/leaderboard${query({ variant })}`),
+
+    // Name them all ("roll call"). region is "world" or a continent; the server reads
+    // a missing one as the world. Refusals: not-an-answer (a territory), outside-region,
+    // already-guessed, unknown-country, finished, not-found, bad-request (including an
+    // autofill that is locked or would fill in the whole region).
+
+    /** What each autofill would fill in here ({ total, easy, known, mine|null, finishedRuns, studyable, best|null }). */
+    rollCallOptions: (region) => request("GET", `${BASE}/rollcall/options${query({ region })}`),
+    /** The run in progress in that region, or null when there is none (204). */
+    rollCallCurrent: (region) => request("GET", `${BASE}/rollcall/current${query({ region })}`),
+    /** A new run. The run in progress in the same region (only) is finished or dropped. */
+    rollCallNew: (region, autofill) => request("POST", `${BASE}/rollcall/new`, { region, autofill }),
+    rollCallName: (id, code) => request("POST", `${BASE}/rollcall/${encodeURIComponent(id)}/name`, { code }),
+    /** "I'm done": the run, FINISHED, with the countries missed. */
+    rollCallFinish: (id) => request("POST", `${BASE}/rollcall/${encodeURIComponent(id)}/finish`),
+    /**
+     * The player's newest finished run in a region, studied: { runId, region, finishedAt,
+     * namedCount, total, missedCount, missed: [{ code, region, lat, lng, nearby, nearestNamed,
+     * namedRate, sampleRuns, yourRuns, yourMisses, familiarity }], order }, or null (204)
+     * when there is none. Read-only.
+     */
+    rollCallStudy: (region) => request("GET", `${BASE}/rollcall/study${query({ region })}`),
+
+    // Name-change requests. Anyone signed in may send one (refusals: bad-request, too-many);
+    // listing and resolving are for the admin only, and anyone else gets not-found.
+
+    /** { code, suggestion, lang: "en"|"es", source: "named"|"missed"|"study"|"other" } -> the request. */
+    sendNameRequest: (request_) => request("POST", `${BASE}/name-requests`, request_),
+    /** The requests, newest first: status "open" (the default) or "all". */
+    nameRequests: (status) => request("GET", `${BASE}/name-requests${query({ status })}`),
+    /** status "done", "dismissed" or "open" (reopen) -> the request as it now is. */
+    resolveNameRequest: (id, status) => request("POST", `${BASE}/name-requests/${encodeURIComponent(id)}/resolve`, { status }),
 };

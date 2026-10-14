@@ -218,10 +218,12 @@ export class Globe {
      * What to draw.
      *   kind        "country" | "capital"
      *   region      the region played (the camera starts there)
-     *   guesses     [{ code, color, capital: { name, lat, lng } | null }]
+     *   guesses     [{ code, color, capital: { name, lat, lng } | null, style }]
+     *               style "missed" (Name them all, once a run is over) draws the
+     *               country hatched, as a revealed answer is, instead of filled
      *   latestCode  the newest guess, drawn a little larger in capitals mode
      *   answer      { code, name, lat, lng, capital } once the game is over, else null
-     *   status      "PLAYING" | "WON" | "GAVE_UP"
+     *   status      "PLAYING" | "WON" | "GAVE_UP" (or "FINISHED" for Name them all)
      */
     setGame(view) {
         const wasOver = this.view.status !== "PLAYING" && !!this.view.answer;
@@ -515,6 +517,18 @@ export class Globe {
         return this.hatch;
     }
 
+    /** Fills and outlines the path just traced with the hatch: a revealed answer, or a missed country. */
+    drawHatched() {
+        const ctx = this.ctx;
+        ctx.fillStyle = this.hatchPattern();
+        ctx.fill();
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = withAlpha(REVEAL_STROKE, 0.7);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
     draw(now = performance.now()) {
         const { ctx, width: w, height: h } = this;
         if (!w || !h) {
@@ -586,6 +600,14 @@ export class Globe {
             if (g.code === answerCode || !level) continue;
             const feature = this.featureAt(level, g.code);
             if (!feature) continue;
+            if (g.style === "missed") {
+                // Hatched like a revealed answer: there, but not found.
+                ctx.beginPath();
+                path(feature);
+                this.drawHatched();
+                if (!capitals) this.collectMarker(markers, g.code, feature, g.color, "revealed");
+                continue;
+            }
             const fill = capitals ? withAlpha(g.color, 0.38) : g.color;
             ctx.beginPath();
             path(feature);
@@ -615,13 +637,7 @@ export class Globe {
                 } else {
                     // Hatched rather than solid, so a screenshot tells a give-up from a
                     // win; the dashes are the hatch's own colour.
-                    ctx.fillStyle = this.hatchPattern();
-                    ctx.fill();
-                    ctx.setLineDash([3, 3]);
-                    ctx.strokeStyle = withAlpha(REVEAL_STROKE, 0.7);
-                    ctx.lineWidth = 1;
-                    ctx.stroke();
-                    ctx.setLineDash([]);
+                    this.drawHatched();
                 }
                 if (!capitals) this.collectMarker(markers, answerCode, feature, ANSWER_COLOR, won ? "won" : "revealed");
             }

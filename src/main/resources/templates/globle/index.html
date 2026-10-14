@@ -1,5 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<!-- The page renders in English. data-i18n="key" (text) and data-i18n-<attribute>="key"
+     mark every word, and i18n.js fills them in the reader's language (English or
+     Spanish). gl-i18n-pending hides the app until that has happened, so Spanish never
+     flashes English first; globle.css shows the page anyway if the script never runs. -->
+<html lang="en" class="gl-i18n-pending" xmlns:th="http://www.thymeleaf.org">
 
 <head>
     <meta charset="UTF-8">
@@ -20,24 +24,25 @@
 
 <!-- Everything Globle needs lives under /globle: this template, static/globle and
      the cloud.gehan.globle package. Nothing here depends on the launcher's files.
-     Two views share the page: home (#/) and a game (#/classic, #/hard, #/play/...).
-     main.js switches between them; data-view says which is showing. -->
+     Two views share the page: home (#/) and a game (#/classic, #/hard, #/play/...,
+     and Name them all at #/all...). main.js switches between them; data-view says
+     which is showing. -->
 <body th:data-puzzle="${puzzleNumber}" th:data-date="${puzzleDate}" th:data-username="${username}" data-view="home" data-accent="home">
 
     <div class="gl-sky" aria-hidden="true"></div>
 
     <div class="gl-session" id="session-banner" role="alert" hidden>
         <i class="bi bi-person-lock" aria-hidden="true"></i>
-        <span id="session-text">Your session has expired, so guesses can't be saved.</span>
-        <a class="gl-btn gl-btn-primary gl-btn-sm" id="session-link" href="/login?continue=/globle">Sign in again</a>
+        <span id="session-text" data-i18n="session.expired">Your session has expired, so guesses can't be saved.</span>
+        <a class="gl-btn gl-btn-primary gl-btn-sm" id="session-link" href="/login?continue=/globle" data-i18n="session.signIn">Sign in again</a>
     </div>
 
     <div class="gl-app">
 
         <header class="gl-top">
-            <a class="gl-chip gl-chip-icon" href="/" title="Back to Gehan.Cloud">
+            <a class="gl-chip gl-chip-icon" href="/" title="Back to Gehan.Cloud" data-i18n-title="nav.back">
                 <i class="bi bi-arrow-left" aria-hidden="true"></i>
-                <span class="sr-only">Back to Gehan.Cloud</span>
+                <span class="sr-only" data-i18n="nav.back">Back to Gehan.Cloud</span>
             </a>
             <h1 class="gl-title">
                 <span class="gl-logo" aria-hidden="true"><i class="bi bi-globe-americas"></i></span>
@@ -45,25 +50,30 @@
                 <span class="gl-title-tag" id="title-tag" th:text="${puzzleNumber != null} ? '#' + ${puzzleNumber} : ''">#1</span>
             </h1>
             <div class="gl-top-actions">
-                <button type="button" class="gl-chip gl-chip-icon" id="btn-board" title="Leaderboard">
+                <!-- The language switch speaks the language it offers: "ES", "Cambiar a español". main.js keeps it so. -->
+                <button type="button" class="gl-chip gl-lang-chip" id="btn-lang" data-lang="es" lang="es" title="Cambiar a español" aria-label="Cambiar a español">
+                    <i class="bi bi-translate" aria-hidden="true"></i>
+                    <span id="btn-lang-label" aria-hidden="true">ES</span>
+                </button>
+                <button type="button" class="gl-chip gl-chip-icon" id="btn-board" title="Leaderboard" data-i18n-title="nav.board">
                     <i class="bi bi-trophy-fill" aria-hidden="true"></i>
-                    <span class="sr-only">Leaderboard</span>
+                    <span class="sr-only" data-i18n="nav.board">Leaderboard</span>
                 </button>
-                <button type="button" class="gl-chip gl-chip-icon" id="btn-stats" title="Your stats">
+                <button type="button" class="gl-chip gl-chip-icon" id="btn-stats" title="Your stats" data-i18n-title="nav.stats">
                     <i class="bi bi-bar-chart-fill" aria-hidden="true"></i>
-                    <span class="sr-only">Your stats</span>
+                    <span class="sr-only" data-i18n="nav.stats">Your stats</span>
                 </button>
-                <button type="button" class="gl-chip gl-chip-icon" id="btn-help" title="How to play">
+                <button type="button" class="gl-chip gl-chip-icon" id="btn-help" title="How to play" data-i18n-title="nav.help">
                     <i class="bi bi-question-lg" aria-hidden="true"></i>
-                    <span class="sr-only">How to play</span>
+                    <span class="sr-only" data-i18n="nav.help">How to play</span>
                 </button>
             </div>
         </header>
 
         <!-- Game view only: the way home, and which game this is. -->
-        <nav class="gl-gamebar" id="game-bar" aria-label="Game" hidden>
+        <nav class="gl-gamebar" id="game-bar" aria-label="Game" data-i18n-aria-label="nav.game" hidden>
             <a class="gl-chip gl-home-btn" id="btn-home" href="#/" data-route>
-                <i class="bi bi-chevron-left" aria-hidden="true"></i><span>Home</span>
+                <i class="bi bi-chevron-left" aria-hidden="true"></i><span data-i18n="nav.home">Home</span>
             </a>
             <h2 class="gl-mode" id="mode-badge" tabindex="-1">
                 <i class="bi bi-calendar2-check" id="mode-icon" aria-hidden="true"></i>
@@ -71,21 +81,23 @@
             </h2>
         </nav>
 
-        <section class="gl-stage" id="stage" aria-label="Globe">
-            <canvas id="globe" tabindex="0" role="application" aria-roledescription="globe"
-                    aria-label="Globe of your guesses. Drag to spin, scroll or pinch to zoom. With the globe focused, arrow keys rotate, plus and minus zoom, and 0 resets."></canvas>
-            <p class="gl-stage-blind" id="stage-blind" hidden><i class="bi bi-eye-slash-fill" aria-hidden="true"></i> Blind</p>
+        <section class="gl-stage" id="stage" aria-label="Globe" data-i18n-aria-label="stage.label">
+            <canvas id="globe" tabindex="0" role="application" aria-roledescription="globe" data-i18n-aria-roledescription="stage.role"
+                    aria-label="Globe of your guesses. Drag to spin, scroll or pinch to zoom. With the globe focused, arrow keys rotate, plus and minus zoom, and 0 resets."
+                    data-i18n-aria-label="stage.canvas"></canvas>
+            <p class="gl-stage-blind" id="stage-blind" hidden><i class="bi bi-eye-slash-fill" aria-hidden="true"></i> <span data-i18n="stage.blind">Blind</span></p>
             <div class="gl-stage-tools" id="stage-tools">
-                <button type="button" class="gl-round" id="zoom-in" title="Zoom in">
-                    <i class="bi bi-plus-lg" aria-hidden="true"></i><span class="sr-only">Zoom in</span>
+                <button type="button" class="gl-round" id="zoom-in" title="Zoom in" data-i18n-title="stage.zoomIn">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i><span class="sr-only" data-i18n="stage.zoomIn">Zoom in</span>
                 </button>
-                <button type="button" class="gl-round" id="zoom-out" title="Zoom out">
-                    <i class="bi bi-dash-lg" aria-hidden="true"></i><span class="sr-only">Zoom out</span>
+                <button type="button" class="gl-round" id="zoom-out" title="Zoom out" data-i18n-title="stage.zoomOut">
+                    <i class="bi bi-dash-lg" aria-hidden="true"></i><span class="sr-only" data-i18n="stage.zoomOut">Zoom out</span>
                 </button>
-                <button type="button" class="gl-round" id="zoom-reset" title="Reset view">
-                    <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i><span class="sr-only">Reset view</span>
+                <button type="button" class="gl-round" id="zoom-reset" title="Reset view" data-i18n-title="stage.reset">
+                    <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i><span class="sr-only" data-i18n="stage.reset">Reset view</span>
                 </button>
             </div>
+            <!-- main.js words this for the pointer in hand (pinch or scroll). -->
             <p class="gl-stage-hint" id="stage-hint" aria-hidden="true">Drag to spin &middot; pinch or scroll to zoom</p>
             <div class="gl-tip" id="tip" aria-hidden="true" hidden></div>
             <p class="gl-stage-status" id="stage-status" role="status" hidden></p>
@@ -93,7 +105,7 @@
 
         <!-- Home view -->
         <section class="gl-home" id="home" aria-labelledby="home-title">
-            <h2 class="sr-only" id="home-title" tabindex="-1">Choose a game</h2>
+            <h2 class="sr-only" id="home-title" tabindex="-1" data-i18n="home.title">Choose a game</h2>
 
             <div class="gl-dailies">
                 <a class="gl-daily" id="card-classic" href="#/classic" data-route data-variant="classic">
@@ -101,9 +113,9 @@
                         <span class="gl-daily-icon" aria-hidden="true"><i class="bi bi-globe-americas"></i></span>
                         <span class="gl-daily-streak" data-streak></span>
                     </span>
-                    <span class="gl-daily-name">Classic</span>
-                    <span class="gl-daily-number" data-number>Daily</span>
-                    <span class="gl-daily-status is-new" data-status>Play</span>
+                    <span class="gl-daily-name" data-i18n="variant.classic">Classic</span>
+                    <span class="gl-daily-number" data-number data-i18n="common.daily">Daily</span>
+                    <span class="gl-daily-status is-new" data-status data-i18n="status.play">Play</span>
                     <span class="sr-only" data-streak-sr></span>
                 </a>
                 <a class="gl-daily" id="card-hard" href="#/hard" data-route data-variant="hard">
@@ -111,41 +123,43 @@
                         <span class="gl-daily-icon" aria-hidden="true"><i class="bi bi-eye-slash-fill"></i></span>
                         <span class="gl-daily-streak" data-streak></span>
                     </span>
-                    <span class="gl-daily-name">Hard</span>
-                    <span class="gl-daily-number" data-number>Daily</span>
-                    <span class="gl-daily-status is-new" data-status>Play</span>
+                    <span class="gl-daily-name" data-i18n="variant.hard">Hard</span>
+                    <span class="gl-daily-number" data-number data-i18n="common.daily">Daily</span>
+                    <span class="gl-daily-status is-new" data-status data-i18n="status.play">Play</span>
                     <span class="sr-only" data-streak-sr></span>
                 </a>
             </div>
 
             <p class="gl-home-error" id="home-error" role="status" hidden>
-                Couldn't load today's status.
-                <button type="button" class="gl-btn gl-btn-sm" id="btn-home-retry">Try again</button>
+                <span data-i18n="home.failed">Couldn't load today's status.</span>
+                <button type="button" class="gl-btn gl-btn-sm" id="btn-home-retry" data-i18n="common.tryAgain">Try again</button>
             </p>
 
             <p class="gl-home-next" id="home-next" hidden>
                 <i class="bi bi-hourglass-split" aria-hidden="true"></i>
-                New puzzles in <span class="gl-countdown" id="home-countdown">--:--:--</span>
+                <span data-i18n="home.next">New puzzles in</span> <span class="gl-countdown" id="home-countdown">--:--:--</span>
             </p>
 
-            <h3 class="gl-section gl-home-section">More ways to play</h3>
+            <h3 class="gl-section gl-home-section" data-i18n="home.more">More ways to play</h3>
             <ul class="gl-presets" id="presets"></ul>
 
             <div class="gl-more" id="more-regions" role="group" aria-labelledby="more-regions-label">
-                <span class="gl-more-label" id="more-regions-label">Other regions</span>
+                <span class="gl-more-label" id="more-regions-label" data-i18n="home.otherRegions">Other regions</span>
             </div>
 
             <p class="gl-credit">
-                Inspired by <a href="https://globle-game.com" target="_blank" rel="noopener noreferrer">globle-game.com</a>
+                <span data-i18n="home.credit">Inspired by</span> <a href="https://globle-game.com" target="_blank" rel="noopener noreferrer">globle-game.com</a>
+                <!-- The admin only, and only with requests open: a quiet count (requests.js). -->
+                <a class="gl-req-count" id="home-requests" href="#/requests" data-route hidden></a>
             </p>
         </section>
 
         <!-- Game view -->
-        <section class="gl-panel" id="panel" aria-label="Your game" hidden>
+        <section class="gl-panel" id="panel" aria-label="Your game" data-i18n-aria-label="panel.label" hidden>
 
             <p class="gl-practice" id="practice-note" hidden>
                 <i class="bi bi-controller" aria-hidden="true"></i>
-                Practice &mdash; doesn't count toward streaks.
+                <span data-i18n="panel.practice">Practice &mdash; doesn't count toward streaks.</span>
             </p>
 
             <p class="gl-panel-status" id="panel-status" role="status" hidden></p>
@@ -155,7 +169,7 @@
                 <p id="start-copy"></p>
                 <button type="button" class="gl-btn gl-btn-primary gl-btn-lg" id="btn-start">
                     <i class="bi bi-play-fill" aria-hidden="true"></i>
-                    <span>Start a game</span>
+                    <span data-i18n="panel.start">Start a game</span>
                 </button>
             </div>
 
@@ -172,14 +186,14 @@
 
                 <div id="end-daily">
                     <div class="gl-tiles" id="end-tiles"></div>
-                    <h3 class="gl-section">Guess distribution</h3>
+                    <h3 class="gl-section" data-i18n="end.distribution">Guess distribution</h3>
                     <div id="end-dist"></div>
                     <p class="gl-next" id="end-next">
                         <i class="bi bi-hourglass-split" aria-hidden="true"></i>
-                        Next puzzle in <span class="gl-countdown" id="countdown">--:--:--</span>
+                        <span data-i18n="end.next">Next puzzle in</span> <span class="gl-countdown" id="countdown">--:--:--</span>
                     </p>
                     <button type="button" class="gl-btn gl-btn-primary" id="btn-next-daily" hidden>
-                        <i class="bi bi-stars" aria-hidden="true"></i> A new puzzle is ready
+                        <i class="bi bi-stars" aria-hidden="true"></i> <span data-i18n="end.newReady">A new puzzle is ready</span>
                     </button>
                 </div>
 
@@ -187,38 +201,39 @@
 
                 <div class="gl-end-actions">
                     <button type="button" class="gl-btn gl-btn-primary" id="btn-share">
-                        <i class="bi bi-share-fill" aria-hidden="true"></i> <span id="btn-share-label">Share</span>
+                        <i class="bi bi-share-fill" aria-hidden="true"></i> <span id="btn-share-label" data-i18n="end.share">Share</span>
                     </button>
                     <a class="gl-btn gl-btn-hard" id="btn-play-hard" href="#/hard" hidden>
-                        <i class="bi bi-eye-slash-fill" aria-hidden="true"></i> Play today's Hard <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                        <i class="bi bi-eye-slash-fill" aria-hidden="true"></i> <span data-i18n="end.playHard">Play today's Hard</span> <i class="bi bi-arrow-right" aria-hidden="true"></i>
                     </a>
                     <button type="button" class="gl-btn gl-btn-primary" id="btn-new-after" hidden>
-                        <i class="bi bi-arrow-repeat" aria-hidden="true"></i> New game
+                        <i class="bi bi-arrow-repeat" aria-hidden="true"></i> <span data-i18n="actions.newGame">New game</span>
                     </button>
                     <button type="button" class="gl-btn gl-btn-ghost" id="btn-board-end">
-                        <i class="bi bi-trophy" aria-hidden="true"></i> Leaderboard
+                        <i class="bi bi-trophy" aria-hidden="true"></i> <span data-i18n="nav.board">Leaderboard</span>
                     </button>
                     <a class="gl-btn gl-btn-ghost" id="btn-home-end" href="#/" data-route>
-                        <i class="bi bi-house-door" aria-hidden="true"></i> Back home
+                        <i class="bi bi-house-door" aria-hidden="true"></i> <span data-i18n="end.home">Back home</span>
                     </a>
                 </div>
-                <label class="sr-only" for="share-fallback">Result to copy</label>
+                <label class="sr-only" for="share-fallback" data-i18n="end.copyLabel">Result to copy</label>
                 <textarea class="gl-share-fallback" id="share-fallback" rows="5" readonly hidden></textarea>
             </div>
 
             <form class="gl-guess" id="guess-form" autocomplete="off" novalidate hidden>
-                <label class="sr-only" for="guess-input" id="guess-label">Guess a country</label>
+                <label class="sr-only" for="guess-input" id="guess-label" data-i18n="guess.label">Guess a country</label>
                 <div class="gl-combo">
                     <i class="bi bi-search gl-combo-icon" id="guess-icon" aria-hidden="true"></i>
                     <input id="guess-input" type="text" inputmode="text" autocomplete="off" autocapitalize="words" autocorrect="off"
-                           spellcheck="false" enterkeyhint="go" placeholder="Guess a country&hellip;"
+                           spellcheck="false" enterkeyhint="go" placeholder="Guess a country&hellip;" data-i18n-placeholder="guess.placeholder"
+                           data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"
                            aria-describedby="guess-error guess-help">
-                    <button type="submit" class="gl-combo-go" id="guess-go" title="Guess">
-                        <i class="bi bi-arrow-right" aria-hidden="true"></i><span class="sr-only">Guess</span>
+                    <button type="submit" class="gl-combo-go" id="guess-go" title="Guess" data-i18n-title="guess.go">
+                        <i class="bi bi-arrow-right" aria-hidden="true"></i><span class="sr-only" data-i18n="guess.go">Guess</span>
                     </button>
                     <ul class="gl-options" id="guess-options" hidden></ul>
                 </div>
-                <p class="sr-only" id="guess-help">Type to see matching places, use the arrow keys to choose, and Enter to guess.</p>
+                <p class="sr-only" id="guess-help" data-i18n="guess.help">Type to see matching places, use the arrow keys to choose, and Enter to guess.</p>
                 <p class="gl-error" id="guess-error" aria-live="assertive"></p>
             </form>
 
@@ -226,45 +241,245 @@
 
             <div class="gl-guess-section" id="guess-section" hidden>
                 <div class="gl-list-head">
-                    <h2 class="gl-section">Guesses <span class="gl-count" id="guess-count">0</span></h2>
-                    <div class="gl-units" role="group" aria-label="Distance units">
+                    <h2 class="gl-section"><span data-i18n="list.heading">Guesses</span> <span class="gl-count" id="guess-count">0</span></h2>
+                    <div class="gl-units" role="group" aria-label="Distance units" data-i18n-aria-label="list.units">
                         <button type="button" data-units="km" aria-pressed="true">km</button>
                         <button type="button" data-units="mi" aria-pressed="false">mi</button>
                     </div>
                 </div>
-                <ol class="gl-guesses" id="guesses" aria-label="Your guesses, closest first"></ol>
-                <p class="gl-empty" id="guesses-empty">No guesses yet.</p>
+                <ol class="gl-guesses" id="guesses" aria-label="Your guesses, closest first" data-i18n-aria-label="list.label"></ol>
+                <p class="gl-empty" id="guesses-empty" data-i18n="list.empty">No guesses yet.</p>
             </div>
 
             <div class="gl-actions" id="play-actions" hidden>
                 <button type="button" class="gl-btn gl-btn-ghost" id="btn-skip" hidden>
-                    <i class="bi bi-skip-forward-fill" aria-hidden="true"></i> New game
+                    <i class="bi bi-skip-forward-fill" aria-hidden="true"></i> <span data-i18n="actions.newGame">New game</span>
                 </button>
                 <button type="button" class="gl-btn gl-btn-ghost gl-btn-quiet-danger" id="btn-giveup">
-                    <i class="bi bi-flag-fill" aria-hidden="true"></i> Give up
+                    <i class="bi bi-flag-fill" aria-hidden="true"></i> <span data-i18n="actions.giveUp">Give up</span>
                 </button>
             </div>
         </section>
+
+        <!-- Name them all (#/all, #/all/<region>): name every country you can. It takes
+             the game panel's place; rollcall-view.js draws it. The box has no
+             suggestions on purpose: a list would give the answers away. -->
+        <section class="gl-panel gl-rc" id="rc-panel" aria-label="Name them all" data-i18n-aria-label="rollcall.name" hidden>
+
+            <!-- Where to play: always here, so a run in another region is one tap away
+                 (a dot marks each run in progress). Picking one goes to its route. -->
+            <div class="gl-rc-where">
+                <span class="sr-only" id="rc-region-label" data-i18n="rollcall.setup.region">Where</span>
+                <div class="gl-rc-regions" id="rc-regions" role="group" aria-labelledby="rc-region-label">
+                    <button type="button" data-region="world" aria-pressed="true"><span data-i18n="region.world">World</span><span class="gl-rc-dot" data-dot hidden><span class="sr-only" data-i18n="rollcall.inProgress">(game in progress)</span></span></button>
+                    <button type="button" data-region="africa" aria-pressed="false"><span data-i18n="region.africa">Africa</span><span class="gl-rc-dot" data-dot hidden><span class="sr-only" data-i18n="rollcall.inProgress">(game in progress)</span></span></button>
+                    <button type="button" data-region="americas" aria-pressed="false"><span data-i18n="region.americas">Americas</span><span class="gl-rc-dot" data-dot hidden><span class="sr-only" data-i18n="rollcall.inProgress">(game in progress)</span></span></button>
+                    <button type="button" data-region="asia" aria-pressed="false"><span data-i18n="region.asia">Asia</span><span class="gl-rc-dot" data-dot hidden><span class="sr-only" data-i18n="rollcall.inProgress">(game in progress)</span></span></button>
+                    <button type="button" data-region="europe" aria-pressed="false"><span data-i18n="region.europe">Europe</span><span class="gl-rc-dot" data-dot hidden><span class="sr-only" data-i18n="rollcall.inProgress">(game in progress)</span></span></button>
+                    <button type="button" data-region="oceania" aria-pressed="false"><span data-i18n="region.oceania">Oceania</span><span class="gl-rc-dot" data-dot hidden><span class="sr-only" data-i18n="rollcall.inProgress">(game in progress)</span></span></button>
+                </div>
+            </div>
+
+            <p class="gl-panel-status" id="rc-status" role="status" hidden></p>
+
+            <div class="gl-card gl-rc-setup" id="rc-setup" hidden>
+                <h2 class="gl-rc-heading" data-i18n="rollcall.sub">How many countries can you name?</h2>
+                <p class="gl-rc-lede" data-i18n="rollcall.setup.lede">Type countries one at a time; each one lights up on the globe. No time limit, but the clock runs.</p>
+
+                <fieldset class="gl-rc-fill" id="rc-autofill">
+                    <legend class="gl-section" data-i18n="rollcall.setup.autofill">Fill in for me</legend>
+                    <label class="gl-rc-opt" data-autofill="off">
+                        <input type="radio" name="rc-autofill" value="off" checked>
+                        <span class="gl-rc-opt-text">
+                            <span class="gl-rc-opt-name"><span data-i18n="rollcall.autofill.off">Off</span> <span class="gl-rc-opt-n" data-count></span></span>
+                            <span class="gl-rc-opt-note" data-note></span>
+                        </span>
+                    </label>
+                    <label class="gl-rc-opt" data-autofill="easy">
+                        <input type="radio" name="rc-autofill" value="easy">
+                        <span class="gl-rc-opt-text">
+                            <span class="gl-rc-opt-name"><span data-i18n="rollcall.autofill.easy">Easy ones</span> <span class="gl-rc-opt-n" data-count></span></span>
+                            <span class="gl-rc-opt-note" data-note></span>
+                        </span>
+                    </label>
+                    <label class="gl-rc-opt" data-autofill="known">
+                        <input type="radio" name="rc-autofill" value="known">
+                        <span class="gl-rc-opt-text">
+                            <span class="gl-rc-opt-name"><span data-i18n="rollcall.autofill.known">Easy + well known</span> <span class="gl-rc-opt-n" data-count></span></span>
+                            <span class="gl-rc-opt-note" data-note></span>
+                        </span>
+                    </label>
+                    <label class="gl-rc-opt" data-autofill="mine">
+                        <input type="radio" name="rc-autofill" value="mine">
+                        <span class="gl-rc-opt-text">
+                            <span class="gl-rc-opt-name"><span data-i18n="rollcall.autofill.mine">My sure things</span> <span class="gl-rc-opt-n" data-count></span></span>
+                            <span class="gl-rc-opt-note" data-note></span>
+                        </span>
+                    </label>
+                </fieldset>
+
+                <p class="gl-rc-best" id="rc-best" hidden></p>
+                <p class="gl-error" id="rc-setup-error" aria-live="assertive"></p>
+                <button type="button" class="gl-btn gl-btn-primary gl-btn-lg" id="rc-start">
+                    <i class="bi bi-play-fill" aria-hidden="true"></i> <span data-i18n="rollcall.setup.start">Start</span>
+                </button>
+                <!-- Once a game here has finished (rollcall-view.js sets the region's href). -->
+                <a class="gl-rc-study-link" id="rc-study-link" href="#/all/study" data-route hidden>
+                    <i class="bi bi-mortarboard" aria-hidden="true"></i> <span data-i18n="study.last">Study your last game</span>
+                </a>
+            </div>
+
+            <div class="gl-card gl-rc-play" id="rc-play" hidden>
+                <div class="gl-rc-score">
+                    <p class="gl-rc-counter" id="rc-counter" tabindex="-1">
+                        <span aria-hidden="true"><strong class="gl-rc-count" id="rc-count">0</strong><span class="gl-rc-of">/</span><span class="gl-rc-total" id="rc-total">0</span></span>
+                        <span class="sr-only" id="rc-count-sr"></span>
+                    </p>
+                    <p class="gl-rc-clock" role="timer" aria-label="Time" data-i18n-aria-label="rollcall.play.time">
+                        <i class="bi bi-stopwatch" aria-hidden="true"></i> <span id="rc-clock">0:00</span>
+                    </p>
+                </div>
+                <!-- No list while typing, and nothing from the browser either. autocomplete="off"
+                     on the form and the box (Chrome and Firefox keep no history for it), no name
+                     attribute (Safari's AutoFill reads names first), one field only (Chrome's address
+                     heuristics need three), and the password managers' own opt-outs
+                     (data-1p-ignore, data-lpignore, data-bwignore, data-form-type). The enter key hint is
+                     "enter": a plain return key that never means "done, close the keyboard". Enter is taken on
+                     keydown (rollcall-view.js), and ↵ and the "Did you mean" buttons never take focus,
+                     so the keyboard stays up from one country to the next. -->
+                <form class="gl-guess is-plain gl-rc-form" id="rc-form" autocomplete="off" novalidate>
+                    <label class="sr-only" for="rc-input" data-i18n="rollcall.input.label">Name a country</label>
+                    <div class="gl-combo">
+                        <i class="bi bi-keyboard gl-combo-icon" aria-hidden="true"></i>
+                        <input id="rc-input" type="text" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off"
+                               spellcheck="false" enterkeyhint="enter" placeholder="Type a country&hellip;" data-i18n-placeholder="rollcall.input.placeholder"
+                               data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"
+                               aria-describedby="rc-feedback rc-help">
+                        <button type="submit" class="gl-combo-go" id="rc-go" title="Enter" data-i18n-title="rollcall.input.go">
+                            <i class="bi bi-arrow-return-left" aria-hidden="true"></i><span class="sr-only" data-i18n="rollcall.input.go">Enter</span>
+                        </button>
+                    </div>
+                    <p class="sr-only" id="rc-help" data-i18n="rollcall.input.helpLenient">No list while you type: a country counts as soon as its name is complete. Press Enter if it waits, or to check a spelling.</p>
+                    <p class="gl-rc-feedback" id="rc-feedback" role="status"></p>
+                </form>
+            </div>
+
+            <div class="gl-actions" id="rc-actions" hidden>
+                <button type="button" class="gl-btn gl-btn-ghost" id="rc-over">
+                    <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> <span data-i18n="rollcall.startOver">Start over</span>
+                </button>
+                <button type="button" class="gl-btn gl-btn-ghost" id="rc-done">
+                    <i class="bi bi-flag-fill" aria-hidden="true"></i> <span data-i18n="rollcall.done">I'm done</span>
+                </button>
+            </div>
+
+            <div class="gl-card gl-end gl-rc-end" id="rc-end" hidden>
+                <p class="gl-end-kicker" id="rc-end-kicker"></p>
+                <h2 class="gl-rc-end-title" id="rc-end-title"></h2>
+                <p class="gl-rc-end-meta" id="rc-end-meta"></p>
+                <p class="gl-rc-end-note" id="rc-end-note" hidden></p>
+                <div class="gl-end-actions">
+                    <button type="button" class="gl-btn gl-btn-primary" id="rc-share">
+                        <i class="bi bi-share-fill" aria-hidden="true"></i> <span id="rc-share-label" data-i18n="end.share">Share</span>
+                    </button>
+                    <button type="button" class="gl-btn gl-btn-primary" id="rc-again">
+                        <i class="bi bi-arrow-repeat" aria-hidden="true"></i> <span data-i18n="rollcall.end.again">Play again</span>
+                    </button>
+                    <a class="gl-btn gl-btn-ghost" id="rc-study" href="#/all/study" data-route hidden>
+                        <i class="bi bi-mortarboard" aria-hidden="true"></i> <span data-i18n="study.open">Study what you missed</span>
+                    </a>
+                    <button type="button" class="gl-btn gl-btn-ghost" id="rc-board">
+                        <i class="bi bi-trophy" aria-hidden="true"></i> <span data-i18n="nav.board">Leaderboard</span>
+                    </button>
+                    <a class="gl-btn gl-btn-ghost" id="rc-home" href="#/" data-route>
+                        <i class="bi bi-house-door" aria-hidden="true"></i> <span data-i18n="end.home">Back home</span>
+                    </a>
+                </div>
+                <label class="sr-only" for="rc-share-fallback" data-i18n="end.copyLabel">Result to copy</label>
+                <textarea class="gl-share-fallback" id="rc-share-fallback" rows="2" readonly hidden></textarea>
+            </div>
+
+            <div class="gl-rc-progress" id="rc-progress" hidden></div>
+
+            <div class="gl-rc-list" id="rc-missed-section" hidden>
+                <h3 class="gl-section"><span data-i18n="rollcall.list.missed">Missed</span> <span class="gl-count" id="rc-missed-count">0</span></h3>
+                <div id="rc-missed"></div>
+            </div>
+
+            <div class="gl-rc-list" id="rc-named-section" hidden>
+                <h3 class="gl-section"><span data-i18n="rollcall.list.named">Named</span> <span class="gl-count" id="rc-named-count">0</span></h3>
+                <div id="rc-named"></div>
+                <p class="gl-empty" id="rc-named-empty" data-i18n="rollcall.list.empty">Nothing named yet. Start typing!</p>
+            </div>
+        </section>
+
+        <!-- Study what you missed (#/all/study, #/all/<region>/study): the last finished
+             Name them all game's missed countries, with where each one is. study.js draws it. -->
+        <section class="gl-panel gl-study" id="study-panel" aria-labelledby="study-title" hidden>
+            <p class="gl-panel-status" id="study-status" role="status" hidden></p>
+            <div class="gl-card gl-study-head" id="study-head" hidden>
+                <h2 class="gl-study-title" id="study-title" data-i18n="study.open">Study what you missed</h2>
+                <p class="gl-study-summary" id="study-summary"></p>
+                <p class="gl-study-hint" id="study-hint" data-i18n="study.hint">Tap a country to see it on the globe, with the countries around it.</p>
+            </div>
+            <ol class="gl-study-list" id="study-list" aria-labelledby="study-title" hidden></ol>
+            <button type="button" class="gl-btn gl-btn-ghost gl-study-more" id="study-more" hidden></button>
+            <div class="gl-actions">
+                <button type="button" class="gl-btn gl-btn-primary" id="study-again" hidden>
+                    <i class="bi bi-arrow-repeat" aria-hidden="true"></i> <span id="study-again-label" data-i18n="rollcall.end.again">Play again</span>
+                </button>
+                <a class="gl-btn gl-btn-ghost" href="#/" data-route>
+                    <i class="bi bi-house-door" aria-hidden="true"></i> <span data-i18n="end.home">Back home</span>
+                </a>
+            </div>
+        </section>
+
+        <!-- Name-change requests (#/requests): the admin's list. Anyone else is sent home,
+             and the server answers them not-found. requests.js draws it. -->
+        <section class="gl-panel gl-req" id="req-panel" aria-labelledby="req-title" hidden>
+            <div class="gl-card gl-req-head">
+                <h2 class="gl-req-title" id="req-title" tabindex="-1"><span data-i18n="requests.title">Name-change requests</span></h2>
+                <p class="gl-req-lede" data-i18n="requests.lede">Names players think should count. Copy them into the next change to the data; a request the data already accepts closes by itself.</p>
+                <div class="gl-req-tools">
+                    <button type="button" class="gl-btn gl-btn-sm gl-btn-ghost" id="req-resolved" aria-pressed="false">
+                        <i class="bi bi-archive" aria-hidden="true"></i> <span data-i18n="requests.showResolved">Show resolved</span>
+                    </button>
+                    <button type="button" class="gl-btn gl-btn-sm" id="req-copy" disabled>
+                        <i class="bi bi-clipboard" aria-hidden="true"></i> <span id="req-copy-label" data-i18n="requests.copyAll">Copy all</span>
+                    </button>
+                </div>
+            </div>
+            <p class="gl-panel-status" id="req-status" role="status" hidden></p>
+            <ul class="gl-req-list" id="req-list" aria-labelledby="req-title"></ul>
+            <p class="gl-empty" id="req-empty" hidden></p>
+            <label class="sr-only" for="req-copy-fallback" data-i18n="requests.copyLabel">Requests to copy</label>
+            <textarea class="gl-share-fallback" id="req-copy-fallback" rows="6" readonly hidden></textarea>
+        </section>
     </div>
 
-    <!-- First visit: one line and the colours, nothing more. -->
+    <!-- First visit: one line and the colours, nothing more (and the language, for
+         a reader whose browser guessed wrong). -->
     <dialog class="gl-sheet gl-sheet-small" id="dlg-welcome" aria-labelledby="welcome-title" aria-describedby="welcome-body">
         <div class="gl-sheet-body gl-welcome">
             <span class="gl-welcome-logo" aria-hidden="true"><i class="bi bi-globe-americas"></i></span>
             <h2 id="welcome-title">Globle</h2>
-            <p id="welcome-body">Find the mystery country. Each guess is coloured by how close it is.</p>
+            <p id="welcome-body" data-i18n="welcome.body">Find the mystery country. Each guess is coloured by how close it is.</p>
             <div class="gl-legend">
                 <div class="gl-legend-row">
                     <span class="gl-legend-bar" aria-hidden="true"></span>
                     <span class="gl-legend-found" aria-hidden="true"></span>
                 </div>
                 <div class="gl-legend-labels">
-                    <span>Far</span><span>Close</span><span>Found</span>
+                    <span data-i18n="legend.far">Far</span><span data-i18n="legend.close">Close</span><span data-i18n="legend.found">Found</span>
                 </div>
             </div>
             <button type="button" class="gl-btn gl-btn-primary gl-btn-lg" data-close autofocus>
-                <i class="bi bi-play-fill" aria-hidden="true"></i> Play
+                <i class="bi bi-play-fill" aria-hidden="true"></i> <span data-i18n="common.play">Play</span>
             </button>
+            <div class="gl-toggle gl-lang-toggle" role="group" aria-label="Language" data-i18n-aria-label="lang.group">
+                <button type="button" data-lang="en" lang="en" aria-pressed="true">English</button>
+                <button type="button" data-lang="es" lang="es" aria-pressed="false">Español</button>
+            </div>
         </div>
     </dialog>
 
@@ -272,12 +487,12 @@
     <dialog class="gl-sheet" id="dlg-help" aria-labelledby="help-title">
         <div class="gl-sheet-body">
             <header class="gl-sheet-head">
-                <h2 id="help-title">How to play</h2>
-                <button type="button" class="gl-chip gl-chip-icon" data-close title="Close" autofocus>
-                    <i class="bi bi-x-lg" aria-hidden="true"></i><span class="sr-only">Close</span>
+                <h2 id="help-title" data-i18n="nav.help">How to play</h2>
+                <button type="button" class="gl-chip gl-chip-icon" data-close title="Close" aria-label="Close" data-i18n-title="common.close" data-i18n-aria-label="common.close" autofocus>
+                    <i class="bi bi-x-lg" aria-hidden="true"></i>
                 </button>
             </header>
-            <p class="gl-lede">Find the mystery country. Each guess is coloured by how close it is; neighbours are 0&nbsp;km.</p>
+            <p class="gl-lede" data-i18n="help.lede">Find the mystery country. Each guess is coloured by how close it is; neighbours are 0&nbsp;km.</p>
 
             <div class="gl-legend">
                 <div class="gl-legend-row">
@@ -285,28 +500,37 @@
                     <span class="gl-legend-found" aria-hidden="true"></span>
                 </div>
                 <div class="gl-legend-labels">
-                    <span>Far</span><span>Close</span><span>Found</span>
+                    <span data-i18n="legend.far">Far</span><span data-i18n="legend.close">Close</span><span data-i18n="legend.found">Found</span>
                 </div>
             </div>
 
             <ul class="gl-rules">
                 <li>
                     <span class="gl-rule-icon is-classic" aria-hidden="true"><i class="bi bi-globe-americas"></i></span>
-                    <div><strong>Classic</strong> &middot; one country a day, the same for everyone.</div>
+                    <div><strong data-i18n="variant.classic">Classic</strong> &middot; <span data-i18n="help.classic">one country a day, the same for everyone.</span></div>
                 </li>
                 <li>
                     <span class="gl-rule-icon is-hard" aria-hidden="true"><i class="bi bi-eye-slash-fill"></i></span>
-                    <div><strong>Hard</strong> &middot; a second daily: blank globe, rarer countries, no suggestions.</div>
+                    <div><strong data-i18n="variant.hard">Hard</strong> &middot; <span data-i18n="help.hard">a second daily: blank globe, rarer countries, no suggestions.</span></div>
                 </li>
                 <li>
                     <span class="gl-rule-icon is-unlimited" aria-hidden="true"><i class="bi bi-infinity"></i></span>
-                    <div><strong>Practice</strong> &middot; unlimited rounds by region or capital. No streaks.</div>
+                    <div><strong data-i18n="common.practice">Practice</strong> &middot; <span data-i18n="help.practice">unlimited rounds by region or capital. No streaks.</span></div>
+                </li>
+                <li>
+                    <span class="gl-rule-icon is-rollcall" aria-hidden="true"><i class="bi bi-list-check"></i></span>
+                    <div><strong data-i18n="rollcall.name">Name them all</strong> &middot; <span data-i18n="help.rollcall">how many countries can you name?</span></div>
                 </li>
             </ul>
 
-            <p>Drag to spin, pinch to zoom. Shares show colours, never names.</p>
+            <p data-i18n="help.controls">Drag to spin, pinch to zoom. Shares show colours, never names.</p>
 
-            <p class="gl-muted gl-small">Inspired by <a href="https://globle-game.com" target="_blank" rel="noopener noreferrer">globle-game.com</a>.</p>
+            <div class="gl-toggle gl-lang-toggle" role="group" aria-label="Language" data-i18n-aria-label="lang.group">
+                <button type="button" data-lang="en" lang="en" aria-pressed="true">English</button>
+                <button type="button" data-lang="es" lang="es" aria-pressed="false">Español</button>
+            </div>
+
+            <p class="gl-muted gl-small"><span data-i18n="home.credit">Inspired by</span> <a href="https://globle-game.com" target="_blank" rel="noopener noreferrer">globle-game.com</a>.</p>
         </div>
     </dialog>
 
@@ -314,23 +538,24 @@
     <dialog class="gl-sheet" id="dlg-stats" aria-labelledby="stats-title">
         <div class="gl-sheet-body">
             <header class="gl-sheet-head">
-                <h2 id="stats-title">Your stats</h2>
-                <button type="button" class="gl-chip gl-chip-icon" data-close title="Close" autofocus>
-                    <i class="bi bi-x-lg" aria-hidden="true"></i><span class="sr-only">Close</span>
+                <h2 id="stats-title" data-i18n="nav.stats">Your stats</h2>
+                <button type="button" class="gl-chip gl-chip-icon" data-close title="Close" aria-label="Close" data-i18n-title="common.close" data-i18n-aria-label="common.close" autofocus>
+                    <i class="bi bi-x-lg" aria-hidden="true"></i>
                 </button>
             </header>
-            <div class="gl-toggle" id="stats-variant" role="group" aria-label="Daily">
-                <button type="button" data-variant="classic" aria-pressed="true">Classic</button>
-                <button type="button" data-variant="hard" aria-pressed="false">Hard</button>
+            <div class="gl-toggle" id="stats-variant" role="group" aria-label="Daily" data-i18n-aria-label="common.daily">
+                <button type="button" data-variant="classic" aria-pressed="true" data-i18n="variant.classic">Classic</button>
+                <button type="button" data-variant="hard" aria-pressed="false" data-i18n="variant.hard">Hard</button>
             </div>
             <div class="gl-tiles" id="stats-tiles"></div>
-            <h3 class="gl-section">Guess distribution</h3>
+            <h3 class="gl-section" data-i18n="end.distribution">Guess distribution</h3>
             <div id="stats-dist"></div>
-            <h3 class="gl-section">Practice</h3>
+            <h3 class="gl-section" data-i18n="common.practice">Practice</h3>
             <dl class="gl-record">
-                <div><dt><i class="bi bi-infinity" aria-hidden="true"></i> Unlimited</dt><dd id="stats-unlimited"></dd></div>
-                <div><dt><i class="bi bi-bank2" aria-hidden="true"></i> Capitals</dt><dd id="stats-capitals"></dd></div>
-                <div><dt><i class="bi bi-eye-slash-fill" aria-hidden="true"></i> Hard practice</dt><dd id="stats-hard"></dd></div>
+                <div><dt><i class="bi bi-infinity" aria-hidden="true"></i> <span data-i18n="practice.country">Unlimited</span></dt><dd id="stats-unlimited"></dd></div>
+                <div><dt><i class="bi bi-bank2" aria-hidden="true"></i> <span data-i18n="practice.capital">Capitals</span></dt><dd id="stats-capitals"></dd></div>
+                <div><dt><i class="bi bi-eye-slash-fill" aria-hidden="true"></i> <span data-i18n="practice.hard">Hard practice</span></dt><dd id="stats-hard"></dd></div>
+                <div><dt><i class="bi bi-list-check" aria-hidden="true"></i> <span data-i18n="rollcall.name">Name them all</span></dt><dd id="stats-rollcall"></dd></div>
             </dl>
         </div>
     </dialog>
@@ -339,25 +564,26 @@
     <dialog class="gl-sheet gl-sheet-wide" id="dlg-board" aria-labelledby="board-title">
         <div class="gl-sheet-body">
             <header class="gl-sheet-head">
-                <h2 id="board-title">Leaderboard</h2>
-                <button type="button" class="gl-chip gl-chip-icon" data-close title="Close">
-                    <i class="bi bi-x-lg" aria-hidden="true"></i><span class="sr-only">Close</span>
+                <h2 id="board-title" data-i18n="nav.board">Leaderboard</h2>
+                <button type="button" class="gl-chip gl-chip-icon" data-close title="Close" aria-label="Close" data-i18n-title="common.close" data-i18n-aria-label="common.close">
+                    <i class="bi bi-x-lg" aria-hidden="true"></i>
                 </button>
             </header>
-            <div class="gl-tabs" role="tablist" aria-label="Leaderboard period">
-                <button type="button" role="tab" id="tab-today" data-tab="today" aria-controls="board-panel" aria-selected="true">Today</button>
-                <button type="button" role="tab" id="tab-week" data-tab="week" aria-controls="board-panel" aria-selected="false" tabindex="-1">Week</button>
-                <button type="button" role="tab" id="tab-all" data-tab="all" aria-controls="board-panel" aria-selected="false" tabindex="-1">All time</button>
-                <button type="button" role="tab" id="tab-unlimited" data-tab="unlimited" aria-controls="board-panel" aria-selected="false" tabindex="-1">Unlimited</button>
+            <div class="gl-tabs" role="tablist" aria-label="Leaderboard period" data-i18n-aria-label="board.periods">
+                <button type="button" role="tab" id="tab-today" data-tab="today" aria-controls="board-panel" aria-selected="true" data-i18n="board.today">Today</button>
+                <button type="button" role="tab" id="tab-week" data-tab="week" aria-controls="board-panel" aria-selected="false" tabindex="-1" data-i18n="board.week">Week</button>
+                <button type="button" role="tab" id="tab-all" data-tab="all" aria-controls="board-panel" aria-selected="false" tabindex="-1" data-i18n="board.all">All time</button>
+                <button type="button" role="tab" id="tab-unlimited" data-tab="unlimited" aria-controls="board-panel" aria-selected="false" tabindex="-1" data-i18n="board.unlimited">Unlimited</button>
             </div>
-            <div class="gl-subtabs" id="board-variant" role="group" aria-label="Daily">
-                <button type="button" data-variant="classic" aria-pressed="true"><i class="bi bi-globe-americas" aria-hidden="true"></i> Classic</button>
-                <button type="button" data-variant="hard" aria-pressed="false"><i class="bi bi-eye-slash-fill" aria-hidden="true"></i> Hard</button>
+            <div class="gl-subtabs" id="board-variant" role="group" aria-label="Daily" data-i18n-aria-label="common.daily">
+                <button type="button" data-variant="classic" aria-pressed="true"><i class="bi bi-globe-americas" aria-hidden="true"></i> <span data-i18n="variant.classic">Classic</span></button>
+                <button type="button" data-variant="hard" aria-pressed="false"><i class="bi bi-eye-slash-fill" aria-hidden="true"></i> <span data-i18n="variant.hard">Hard</span></button>
             </div>
-            <div class="gl-subtabs" id="board-sub" role="group" aria-label="Game type" hidden>
-                <button type="button" data-kind="country" aria-pressed="true"><i class="bi bi-globe2" aria-hidden="true"></i> Countries</button>
-                <button type="button" data-kind="capital" aria-pressed="false"><i class="bi bi-bank2" aria-hidden="true"></i> Capitals</button>
-                <button type="button" data-kind="hard" aria-pressed="false"><i class="bi bi-eye-slash-fill" aria-hidden="true"></i> Hard</button>
+            <div class="gl-subtabs" id="board-sub" role="group" aria-label="Game type" data-i18n-aria-label="board.gameType" hidden>
+                <button type="button" data-kind="country" aria-pressed="true"><i class="bi bi-globe2" aria-hidden="true"></i> <span data-i18n="board.countries">Countries</span></button>
+                <button type="button" data-kind="capital" aria-pressed="false"><i class="bi bi-bank2" aria-hidden="true"></i> <span data-i18n="board.capitals">Capitals</span></button>
+                <button type="button" data-kind="hard" aria-pressed="false"><i class="bi bi-eye-slash-fill" aria-hidden="true"></i> <span data-i18n="variant.hard">Hard</span></button>
+                <button type="button" data-kind="rollcall" aria-pressed="false"><i class="bi bi-list-check" aria-hidden="true"></i> <span data-i18n="rollcall.name">Name them all</span></button>
             </div>
             <div class="gl-board" id="board-panel" role="tabpanel" aria-labelledby="tab-today" tabindex="0"></div>
         </div>
@@ -366,18 +592,50 @@
     <!-- In-page confirmation (never window.confirm) -->
     <dialog class="gl-sheet gl-sheet-small" id="dlg-confirm" aria-labelledby="confirm-title" aria-describedby="confirm-body">
         <div class="gl-sheet-body">
-            <h2 id="confirm-title">Are you sure?</h2>
+            <h2 id="confirm-title" data-i18n="common.areYouSure">Are you sure?</h2>
             <p id="confirm-body"></p>
             <div class="gl-confirm-actions">
-                <button type="button" class="gl-btn" id="confirm-cancel" data-close>Cancel</button>
-                <button type="button" class="gl-btn gl-btn-primary" id="confirm-ok">OK</button>
+                <button type="button" class="gl-btn" id="confirm-cancel" data-close data-i18n="common.cancel">Cancel</button>
+                <button type="button" class="gl-btn gl-btn-primary" id="confirm-ok" data-i18n="common.ok">OK</button>
             </div>
         </div>
+    </dialog>
+
+    <!-- Request a name change: opened by the pencil beside a country (requests.js). The
+         box is not a name, address or contact field, and says so to autofill. -->
+    <dialog class="gl-sheet gl-sheet-small" id="dlg-request" aria-labelledby="request-title" aria-describedby="request-lede">
+        <form class="gl-sheet-body gl-request" id="request-form" autocomplete="off" novalidate>
+            <header class="gl-sheet-head">
+                <h2 id="request-title" data-i18n="request.titlePlain">Suggest a name</h2>
+                <button type="button" class="gl-chip gl-chip-icon" data-close title="Close" aria-label="Close" data-i18n-title="common.close" data-i18n-aria-label="common.close">
+                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                </button>
+            </header>
+            <p id="request-lede" data-i18n="request.lede">Type the spelling you think should count. It goes to whoever looks after the game, for the next update.</p>
+            <label class="gl-request-label" for="request-input" data-i18n="request.label">Spelling that should count</label>
+            <input class="gl-request-input" id="request-input" type="text" inputmode="text" maxlength="80"
+                   autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send"
+                   data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"
+                   placeholder="e.g. Great Britain" data-i18n-placeholder="request.placeholder"
+                   aria-describedby="request-error">
+            <div class="gl-request-picks" id="request-picks" hidden>
+                <p class="gl-request-picks-label" id="request-picks-label" data-i18n="request.recent">Not recognised in this game:</p>
+                <div class="gl-request-chips" id="request-chips" role="group" aria-labelledby="request-picks-label"></div>
+            </div>
+            <p class="gl-error" id="request-error" aria-live="assertive"></p>
+            <div class="gl-confirm-actions">
+                <button type="button" class="gl-btn" id="request-cancel" data-close data-i18n="common.cancel">Cancel</button>
+                <button type="submit" class="gl-btn gl-btn-primary" id="request-send">
+                    <i class="bi bi-send" aria-hidden="true"></i> <span data-i18n="request.send">Send</span>
+                </button>
+            </div>
+        </form>
     </dialog>
 
     <div class="gl-toast" id="toast" role="status" aria-live="polite" hidden></div>
     <div class="sr-only" id="announcer" aria-live="polite" aria-atomic="true"></div>
 
+    <!-- English only: without a script there is nothing to put it in Spanish. -->
     <noscript>
         <p class="gl-noscript">Globle needs JavaScript to draw the globe. <a href="/">Back to Gehan.Cloud</a></p>
     </noscript>

@@ -5,9 +5,10 @@
 //   npm run check        (from tools/globle)
 //
 // Exits non-zero on any failure. Cross-checks against the world-countries
-// package (borders, UN membership, capital names) are printed as notes rather
-// than failures: that dataset makes different calls on disputed borders and
-// split capitals, and it is only consulted here, never copied into the output.
+// package (borders, UN membership, capital names, Spanish names) are printed
+// as notes rather than failures: that dataset makes different calls on
+// disputed borders and split capitals, and it is only consulted here, never
+// copied into the output.
 
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -32,12 +33,14 @@ const world = JSON.parse(fs.readFileSync(OUTPUTS.world, 'utf8'));
 
 // ---------------------------------------------------------------- countries.json
 
-const KEYS = ['code', 'name', 'iso2', 'aliases', 'answer', 'region', 'difficulty', 'smallIsland', 'lat', 'lng', 'capital'];
-const CAPITAL_KEYS = ['name', 'aliases', 'lat', 'lng'];
+const KEYS = ['code', 'name', 'nameEs', 'iso2', 'aliases', 'aliasesEs', 'answer', 'region', 'difficulty', 'smallIsland',
+  'lat', 'lng', 'capital'];
+const CAPITAL_KEYS = ['name', 'nameEs', 'aliases', 'aliasesEs', 'lat', 'lng'];
 const byCode = new Map();
 const isLat = (v) => Number.isFinite(v) && v >= -90 && v <= 90;
 const isLng = (v) => Number.isFinite(v) && v >= -180 && v <= 180;
-const isStrings = (a) => Array.isArray(a) && a.every((s) => typeof s === 'string' && s.trim() === s && s.length > 0);
+const isName = (s) => typeof s === 'string' && s.trim() === s && s.length > 0;
+const isStrings = (a) => Array.isArray(a) && a.every(isName);
 
 check(Array.isArray(countries), 'countries.json is not an array');
 for (const c of countries) {
@@ -47,8 +50,10 @@ for (const c of countries) {
   check(!byCode.has(c.code), `${id}: duplicate code`);
   byCode.set(c.code, c);
   check(typeof c.name === 'string' && c.name.length > 0, `${id}: no name`);
+  check(isName(c.nameEs), `${id}: no Spanish name (nameEs)`);
   check(c.iso2 === null || /^[A-Z]{2}$/.test(c.iso2), `${id}: bad iso2 ${c.iso2}`);
   check(isStrings(c.aliases), `${id}: bad aliases`);
+  check(isStrings(c.aliasesEs), `${id}: bad Spanish aliases (aliasesEs)`);
   check(typeof c.answer === 'boolean', `${id}: answer not boolean`);
   check(REGIONS.has(c.region), `${id}: bad region ${c.region}`);
   check(Number.isInteger(c.difficulty) && c.difficulty >= 1 && c.difficulty <= 5, `${id}: difficulty ${c.difficulty} is not 1..5`);
@@ -62,7 +67,9 @@ for (const c of countries) {
     const cap = c.capital;
     check(JSON.stringify(Object.keys(cap)) === JSON.stringify(CAPITAL_KEYS), `${id}: capital keys ${Object.keys(cap)}`);
     check(typeof cap.name === 'string' && cap.name.length > 0, `${id}: capital has no name`);
+    check(isName(cap.nameEs), `${id}: capital has no Spanish name (nameEs)`);
     check(isStrings(cap.aliases), `${id}: bad capital aliases`);
+    check(isStrings(cap.aliasesEs), `${id}: bad Spanish capital aliases (aliasesEs)`);
     check(isLat(cap.lat) && isLng(cap.lng), `${id}: bad capital coordinates`);
   }
 }
@@ -80,11 +87,14 @@ for (const c of answers) {
   check(c.region !== 'antarctica', `${c.code}: answer country in antarctica`);
 }
 
-// Every name and alias points at exactly one country, so typing one can never
-// be ambiguous.
+// Every name and alias, English and Spanish together, points at exactly one
+// country, so typing one can never be ambiguous: the page accepts both languages
+// whichever one it shows.
+const namesOf = (c) => [c.name, ...c.aliases, c.nameEs, ...c.aliasesEs];
+const capitalNamesOf = (cap) => [cap.name, ...cap.aliases, cap.nameEs, ...cap.aliasesEs];
 const owners = new Map();
 for (const c of countries) {
-  for (const n of [c.name, ...c.aliases]) {
+  for (const n of namesOf(c)) {
     const key = normalise(n);
     if (owners.has(key) && owners.get(key) !== c.code) fail(`"${n}" names both ${owners.get(key)} and ${c.code}`);
     owners.set(key, c.code);
@@ -92,18 +102,127 @@ for (const c of countries) {
 }
 
 // Hard has no list to pick from, so a typed name goes through the client's own
-// matcher (match.js findExact). That matcher also drops punctuation, reads "St" as
-// "Saint" and ignores "the"/"of"/"and". Every name and alias must still find its
-// own place there. It is imported as a data: URL so it loads as ESM on any Node 20.
+// matcher (match.js findExact). That matcher also drops punctuation and a leading
+// article, reads "St" as "Saint" and "Sta"/"Sto" as "Santa"/"Santo", and ignores
+// "the"/"of"/"and" and Spanish "de"/"del"/"y"/"el"/"la"/"los"/"las". Every name
+// and alias, in both languages, must still find its own place there, with the
+// page in either language. It is imported as a data: URL so it loads as ESM on
+// any Node 20.
 const matchJs = fs.readFileSync(path.join(REPO, 'src/main/resources/static/globle/js/match.js'), 'utf8');
-const { buildIndex, findExact } = await import('data:text/javascript,' + encodeURIComponent(matchJs));
-const typed = buildIndex(countries.map((c) => ({ ...c, canBeAnswer: c.answer })), 'country');
+const { buildIndex, findExact, search, displayName, capitalName, normalize } =
+  await import('data:text/javascript,' + encodeURIComponent(matchJs));
+const listed = countries.map((c) => ({ ...c, canBeAnswer: c.answer }));
+const typed = { en: buildIndex(listed, 'country', 'en'), es: buildIndex(listed, 'country', 'es') };
 for (const c of countries) {
-  for (const n of [c.name, ...c.aliases]) {
-    const got = findExact(typed, n);
-    check(got === c.code, `"${n}" cannot be typed in Hard: the matcher finds ${got ?? 'no single place'}, not ${c.code}`);
+  for (const n of namesOf(c)) {
+    for (const [lang, index] of Object.entries(typed)) {
+      const got = findExact(index, n);
+      check(got === c.code, `"${n}" cannot be typed in Hard (page in ${lang}): the matcher finds ${got ?? 'no single place'}, not ${c.code}`);
+    }
   }
 }
+
+// The same for capitals, where Enter picks the one capital the text names. A few
+// capitals genuinely share a name once spaces and hyphens are squeezed out; for
+// those the list offers both, and these pairs are the only ones allowed.
+const CAPITAL_HOMONYMS = [['JAM', 'NFK'], ['CYM', 'GUY'], ['GLP', 'KNA']]; // Kingston, George Town/Georgetown, Basse-Terre/Basseterre
+const homonymsFound = new Set();
+for (const lang of ['en', 'es']) {
+  const capitalIndex = buildIndex(listed, 'capital', lang);
+  for (const c of countries) {
+    if (!c.capital) continue;
+    for (const n of capitalNamesOf(c.capital)) {
+      const got = findExact(capitalIndex, n);
+      if (got === c.code) continue;
+      const named = search(capitalIndex, n, { limit: 50 }).filter((r) => r.exact).map((r) => r.code).sort();
+      const pair = CAPITAL_HOMONYMS.find((p) => p.join() === named.join());
+      if (got === null && pair) homonymsFound.add(pair.join());
+      else fail(`capital "${n}" of ${c.code} cannot be picked with Enter (page in ${lang}): it names ${named.join(', ') || 'nothing'}`);
+    }
+  }
+}
+for (const pair of CAPITAL_HOMONYMS) {
+  check(homonymsFound.has(pair.join()), `${pair.join(' and ')} are listed as sharing a capital name, but no longer do`);
+}
+
+// Spanish names a Spanish speaker would expect, and what they type for them.
+const SPANISH = {
+  DEU: 'Alemania', USA: 'Estados Unidos', GBR: 'Reino Unido', NLD: 'Países Bajos', FLK: 'Islas Malvinas',
+  CIV: 'Costa de Marfil', COD: 'República Democrática del Congo', SAU: 'Arabia Saudita', QAT: 'Catar', DJI: 'Yibuti',
+  SWZ: 'Esuatini', FJI: 'Fiyi', TLS: 'Timor Oriental', CZE: 'Chequia', VAT: 'Ciudad del Vaticano', GRL: 'Groenlandia',
+};
+for (const [code, name] of Object.entries(SPANISH)) {
+  check(byCode.get(code)?.nameEs === name, `${code}: Spanish name "${byCode.get(code)?.nameEs}", expected "${name}"`);
+}
+check(byCode.get('NLD')?.aliasesEs.includes('Holanda'), 'NLD: "Holanda" should be a Spanish alias');
+const SPANISH_CAPITALS = { GBR: 'Londres', CHN: 'Pekín', MEX: 'Ciudad de México', USA: 'Washington D. C.', EGY: 'El Cairo' };
+for (const [code, name] of Object.entries(SPANISH_CAPITALS)) {
+  check(byCode.get(code)?.capital?.nameEs === name, `${code}: Spanish capital "${byCode.get(code)?.capital?.nameEs}", expected "${name}"`);
+}
+const TYPED_ES = {
+  'alemania': 'DEU', 'Germany': 'DEU', 'holanda': 'NLD', 'EEUU': 'USA', 'EE. UU.': 'USA', 'los Estados Unidos': 'USA',
+  'el Perú': 'PER', 'peru': 'PER', 'la Argentina': 'ARG', 'la India': 'IND', 'las bahamas': 'BHS', 'Sta. Lucía': 'LCA',
+  'Sto Tome y Principe': 'STP', 'guinea bisau': 'GNB', 'japon': 'JPN', 'malvinas': 'FLK', 'españa': 'ESP', 'espana': 'ESP',
+  'Arabia Saudí': 'SAU', 'República del Congo': 'COG', 'republica congo': 'COG', 'congo': 'COG', 'corea': 'KOR',
+  'Birmania': 'MMR', 'Inglaterra': 'GBR', 'Suiza': 'CHE', 'salvador': 'SLV',
+  'eeuu': 'USA', 'ee uu': 'USA', 'estados unidos': 'USA', 'reino unido': 'GBR', 'paises bajos': 'NLD', 'corea del sur': 'KOR',
+  'surcorea': 'KOR', 'norcorea': 'PRK', 'costa de marfil': 'CIV', 'republica democratica del congo': 'COD', 'rd congo': 'COD',
+  'rd del congo': 'COD', 'zaire': 'COD', 'mexico': 'MEX', 'sudafrica': 'ZAF', 'nueva zelanda': 'NZL', 'el salvador': 'SLV',
+  'trinidad y tobago': 'TTO', 'san cristobal y nieves': 'KNA', 'guinea ecuatorial': 'GNQ', 'sudan del sur': 'SSD',
+  'suazilandia': 'SWZ', 'swazilandia': 'SWZ', 'emiratos arabes': 'ARE', 'rep. dominicana': 'DOM', 'salomon': 'SLB',
+  'congo kinsasa': 'COD', 'rep checa': 'CZE', 'Rep. Checa': 'CZE', 'kazakistan': 'KAZ', 'rep centroafricana': 'CAF',
+  'rep. democratica del congo': 'COD',
+};
+for (const [text, code] of Object.entries(TYPED_ES)) {
+  for (const [lang, index] of Object.entries(typed)) {
+    const got = findExact(index, text);
+    check(got === code, `"${text}" should name ${code} on a page in ${lang}, the matcher finds ${got ?? 'no single place'}`);
+  }
+}
+// Capitals typed the Spanish way, on a page in either language.
+const TYPED_CAPITALS_ES = {
+  'londres': 'GBR', 'pekin': 'CHN', 'ciudad de mexico': 'MEX', 'mexico df': 'MEX', 'washington dc': 'USA', 'moscu': 'RUS',
+  'varsovia': 'POL', 'atenas': 'GRC', 'copenhague': 'DNK', 'estocolmo': 'SWE', 'la haya': 'NLD', 'ciudad del cabo': 'ZAF',
+  'el cairo': 'EGY', 'la habana': 'CUB', 'la paz': 'BOL', 'puerto argentino': 'FLK', 'ciudad de san marino': 'SMR', 'riyad': 'SAU', 'kinsasa': 'COD',
+};
+for (const lang of ['en', 'es']) {
+  const capitalIndex = buildIndex(listed, 'capital', lang);
+  for (const [text, code] of Object.entries(TYPED_CAPITALS_ES)) {
+    const got = findExact(capitalIndex, text);
+    check(got === code, `capital "${text}" should name ${code} on a page in ${lang}, the matcher finds ${got ?? 'no single place'}`);
+  }
+}
+
+// Name them all accepts a typed country at once unless the text is also the start
+// of another answer country's name or alias, in either language (Niger, Nigeria),
+// and then waits to see whether more is coming. Keep those pairs to the ones the
+// names themselves make: an old or rare alias that starts with another answer's
+// whole name ("China Taipéi" for Taiwan, "Honduras Británica" for Belize) would
+// slow down a common answer for everyone, English page included.
+const PREFIX_PAIRS = new Set([
+  'COG<COD', 'DMA<DOM', 'GBR<UKR', 'GIN<GNB', 'GIN<GNQ', 'IRL<GBR', 'KOR<PRK', 'NER<NGA', 'SDN<SSD',
+]);
+{
+  const squeezed = (s) => normalize(s).replace(/ /g, '');
+  const answerNames = countries.filter((c) => c.answer).map((c) => [c.code, namesOf(c).map(squeezed)]);
+  const found = new Set();
+  for (const [a, mine] of answerNames) {
+    for (const [b, theirs] of answerNames) {
+      if (a === b) continue;
+      const hit = mine.find((m) => theirs.some((t) => t !== m && t.startsWith(m)));
+      if (!hit) continue;
+      found.add(`${a}<${b}`);
+      check(PREFIX_PAIRS.has(`${a}<${b}`), `"${hit}" (${a}) is the start of a name or alias of ${b}: Name them all would wait after it`);
+    }
+  }
+  for (const pair of PREFIX_PAIRS) check(found.has(pair), `${pair} is listed as a prefix pair, but no longer is`);
+}
+check(displayName(byCode.get('DEU'), 'es') === 'Alemania' && displayName(byCode.get('DEU'), 'en') === 'Germany',
+  'match.js displayName does not localise');
+check(capitalName(byCode.get('GBR'), 'es') === 'Londres' && capitalName(byCode.get('ATA'), 'es') === null,
+  'match.js capitalName does not localise');
+check(search(buildIndex(listed, 'capital', 'es'), 'Londres')[0]?.label === 'Londres — Reino Unido',
+  'capitals labels are not in Spanish on a page in Spanish');
 
 // ---------------------------------------------------------------- distances.json
 
@@ -413,6 +532,11 @@ for (const w of wc) {
     if (!w.capital.some((name) => mine.includes(normalise(name)))) {
       notes.push(`${w.cca3}: our capital ${c.capital.name}, world-countries says ${w.capital.join(' / ')}`);
     }
+  }
+  // Its Spanish common name should be one a Spanish speaker can type here.
+  const spa = w.translations?.spa?.common;
+  if (c && spa && findExact(typed.es, spa) !== c.code) {
+    notes.push(`${w.cca3}: world-countries' Spanish name "${spa}" does not find it; ours is ${c.nameEs}`);
   }
 }
 
