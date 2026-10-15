@@ -28,7 +28,7 @@ WORKDIR /build/target
 RUN java -Djarmode=tools -jar app.jar extract --layers --destination extracted
 
 # --- Stage 2: runtime --------------------------------------------------------
-FROM eclipse-temurin:21-jre-noble AS runtime
+FROM eclipse-temurin:24-jre-noble AS runtime
 
 LABEL org.opencontainers.image.title="Gehan Cloud" \
       org.opencontainers.image.description="Self-hosted personal cloud portal built with Spring Boot" \
