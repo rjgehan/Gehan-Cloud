@@ -1,7 +1,7 @@
 const LOCATIONS = [
     { name: "Hamilton", lat: 40.22, lon: -74.65, prefix: "ham" },
     { name: "New York", lat: 40.7128, lon: -74.0060, prefix: "nyc" },
-    { name: "Ashburn", lat: 39.0438, lon: -77.4874, prefix: "ash" },
+    { name: "Hoboken", lat: 40.7440, lon: -74.0324, prefix: "hob" },
     { name: "Manasquan", lat: 40.1265, lon: -74.0424, prefix: "man" }
 ];
 
