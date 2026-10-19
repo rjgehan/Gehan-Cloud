@@ -36,7 +36,9 @@ at most a hairline of that same colour to close the seam between two guessed
 neighbours. In **Hard** the globe is blind: sea and a faint graticule only, with each
 guess filled in where it lies. When a game ends the answer appears, solid green if
 you found it and hatched if you gave up. A finished Hard game also fades the land in,
-still with no borders, so you can see where the answer is.
+still with no borders, so you can see where the answer is. The globe spins under a
+drag everywhere. On a phone's home screen it spins sideways only, so an up or down
+swipe over it still scrolls the page (`touch-action: pan-y`).
 
 **Hard input.** Hard has no dropdown. The box is plain text with autocomplete,
 autocorrect and spellcheck off, and Enter submits. The text must match a place's
@@ -89,11 +91,17 @@ guess box in any mode has focus and the visible area has shrunk by at least 120 
 on-screen keyboard), `typing.js` pins the app to exactly the part of the screen above
 the keyboard. The header, the game bar, the practice note and Name them all's region
 chips are put away, and the globe shrinks to fill whatever the box and its feedback
-line leave. If that line grows while the keyboard is up (Name them all's "Did you
-mean" buttons, an explanation that wraps), the globe gives up the room, so the line
-never slips under the keyboard. Suggestions open upwards over the globe, taking at
-most a little over half of it. When the keyboard closes or the box loses focus, the
-page goes back as it was, scrolled to the top. A hardware keyboard, a pinch-zoomed
+line leave (Name them all's Restart and I'm done sit beside the count, above the box,
+so they stay in view). The layout follows the keyboard only once it has stopped
+sliding (the visible height unchanged for 120 ms), so the globe is resized once, not
+on every frame of the slide. While typing, the line under the box keeps one height
+(empty, "✓ France" or a "Did you mean" button), and while the visible height stays the
+same the globe only ever gives room up, never takes it back: an earlier version
+resized the globe with every name, which read as it zooming in and out. Touching the
+globe or its zoom buttons does not take the focus from the box, so the keyboard stays
+up and the globe can be spun while typing. Suggestions open upwards over the globe,
+taking at most a little over half of it. When the keyboard closes or the box loses
+focus, the page goes back as it was, scrolled to the top. A hardware keyboard, a pinch-zoomed
 page or a narrow desktop window never shrinks the visible area that way, so they keep
 the normal layout. The size comes from the visual viewport, not from scrolling, which
 is what works on iOS, where the keyboard pans the visible area over a page that does
@@ -157,7 +165,10 @@ not left on the Start button that just went.
 
 - A country is accepted the moment the text names exactly one country still to name
   in the region. The box empties but keeps focus, so a phone's keyboard stays up. The
-  line under it shows "✓ 🇫🇷 France", and the globe flies to the country and pulses.
+  line under it shows "✓ 🇫🇷 France", and the country pulses where it is. Only a
+  country off screen makes the globe glide to it, and without the zoom dip other modes
+  use, so names typed one after another do not keep pulling the globe back and in, or
+  undo a spin.
 - If the text is also the start of another unnamed country's name or alias, in
   either language, it waits 0.7 s for more typing (2 s when the text ends in a space
   or a hyphen), and Enter accepts it at once. The pairs are Niger/Nigeria,
@@ -376,7 +387,7 @@ says "You didn't type any, so this game doesn't count."
 **Ending.** A run ends when you press "I'm done", when a new run in the same region
 replaces it after something was typed, or by itself when the last country in the
 region is named. "I'm done" asks first, then waits for any names still being saved.
-"Start over" asks too, then starts a new run in the same region with the same
+"Restart" (beside the count, with "I'm done") asks too, then starts a new run in the same region with the same
 fill-in (Off if that is no longer open). The run it replaces is finished and counts
 if anything was typed ("Your last game counted: 57 of 197."), and is deleted
 otherwise. Runs in other regions and practice games are never touched.

@@ -332,7 +332,13 @@ export class Globe {
     }
 
     /** Smoothly turns the globe to put [lon, lat] in the middle, optionally zooming. */
-    flyTo(lonlat, { zoom, duration } = {}) {
+    /**
+     *   zoom      where the zoom ends (default: where it is)
+     *   duration  ms (default: by how far it goes)
+     *   dip       false: no pulling back on the way. Name them all flies after every
+     *             name, and a dip each time reads as the globe flickering in and out.
+     */
+    flyTo(lonlat, { zoom, duration, dip = true } = {}) {
         if (!lonlat || !Number.isFinite(lonlat[0]) || !Number.isFinite(lonlat[1])) {
             return;
         }
@@ -355,7 +361,7 @@ export class Globe {
             zoomFrom,
             zoomTo,
             // Pull the camera back a little on long trips, like a plane climbing.
-            dip: Math.min(0.2, (angle / Math.PI) * 0.35),
+            dip: dip ? Math.min(0.2, (angle / Math.PI) * 0.35) : 0,
         };
         this.requestDraw();
     }
@@ -495,6 +501,21 @@ export class Globe {
 
     isVisible(lonlat) {
         return d3.geoDistance(lonlat, this.centre()) < Math.PI / 2 - 0.03;
+    }
+
+    /**
+     * Whether a point is on the side facing us AND inside the canvas, away from its
+     * edges by `margin` (a share of the canvas): zoomed in on a region, a country can
+     * face us yet be off screen.
+     */
+    inView(lonlat, margin = 0.08) {
+        if (!lonlat || !this.width || !this.height || !this.isVisible(lonlat)) return false;
+        this.applyProjection();
+        const p = this.projection(lonlat);
+        if (!p) return false;
+        const mx = this.width * margin;
+        const my = this.height * margin;
+        return p[0] >= mx && p[0] <= this.width - mx && p[1] >= my && p[1] <= this.height - my;
     }
 
     hatchPattern() {

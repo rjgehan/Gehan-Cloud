@@ -27,6 +27,8 @@ const MIN_STAGE_PX = 120;
 const BOTTOM_GAP_PX = 6;
 /** Leaving the box for this long ends typing; a quick refocus does not flicker. */
 const BLUR_GRACE_MS = 150;
+/** The visible height must hold still this long (the keyboard done sliding) before the layout follows it. */
+const SETTLE_MS = 120;
 
 const BOXES = "#guess-input, #rc-input";
 
@@ -56,7 +58,12 @@ export function installTypingLayout({ stage, body = document.body } = {}) {
     let turned = false;
     let box = null;             // the guess box being typed in, if any
     let blurTimer = 0;
+    let settleTimer = 0;
     let frame = 0;
+    // The globe's height chosen for one visible height: { vvH, height }. While the
+    // visible height stays the same the globe only ever gives room up, never takes
+    // it back, so it is resized once per keyboard, not with every line under the box.
+    let sizedFor = null;
 
     const schedule = () => {
         if (!frame) frame = window.requestAnimationFrame(apply);
@@ -75,6 +82,7 @@ export function installTypingLayout({ stage, body = document.body } = {}) {
     };
 
     function stop() {
+        sizedFor = null;
         if (!body.classList.contains("gl-typing")) return;
         body.classList.remove("gl-typing");
         for (const name of ["--gl-vv-top", "--gl-vv-h", "--gl-typing-stage-h", "--gl-typing-list-h"]) {
@@ -122,7 +130,10 @@ export function installTypingLayout({ stage, body = document.body } = {}) {
         const stageRect = stage.getBoundingClientRect();
         const below = form.getBoundingClientRect().bottom - stageRect.bottom;
         const above = stageRect.top - appTop;
-        const height = Math.max(MIN_STAGE_PX, Math.floor(vv.height - above - below - BOTTOM_GAP_PX));
+        const vvH = Math.floor(vv.height);
+        let height = Math.max(MIN_STAGE_PX, Math.floor(vv.height - above - below - BOTTOM_GAP_PX));
+        if (sizedFor && sizedFor.vvH === vvH) height = Math.min(height, sizedFor.height);
+        sizedFor = { vvH, height };
         body.style.setProperty("--gl-typing-stage-h", `${height}px`);
         // Suggestions open upwards over the globe, since below the box is the
         // keyboard. They take at most a little over half of it (they scroll), so
@@ -161,8 +172,21 @@ export function installTypingLayout({ stage, body = document.body } = {}) {
             baseline = turned ? vv.height : Math.max(baseline, vv.height);
             turned = false;
         }
-        schedule();
+        // A keyboard slides in over several frames, each one a resize. Lay out once
+        // it has stopped: resizing the globe on every frame reads as it zooming.
+        window.clearTimeout(settleTimer);
+        settleTimer = window.setTimeout(schedule, SETTLE_MS);
     }
+
+    // Touching the globe (or its zoom buttons) while a box has focus must not take
+    // the focus: the keyboard would close and this layout come apart under the
+    // finger, so the globe could never be spun while typing. mousedown is the event
+    // whose default moves focus (touch browsers fire it for a tap too); spinning runs
+    // on pointer events and is unaffected.
+    function onStageMouseDown(e) {
+        if (isBox(document.activeElement)) e.preventDefault();
+    }
+    stage.addEventListener("mousedown", onStageMouseDown);
 
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", onFocusOut);
@@ -176,7 +200,9 @@ export function installTypingLayout({ stage, body = document.body } = {}) {
         vv.removeEventListener("resize", onViewport);
         vv.removeEventListener("scroll", schedule);
         narrow.removeEventListener("change", schedule);
+        stage.removeEventListener("mousedown", onStageMouseDown);
         window.clearTimeout(blurTimer);
+        window.clearTimeout(settleTimer);
         if (frame) window.cancelAnimationFrame(frame);
         frame = 0;
         box = null;

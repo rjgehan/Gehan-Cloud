@@ -330,14 +330,27 @@
             </div>
 
             <div class="gl-card gl-rc-play" id="rc-play" hidden>
+                <!-- Restart and I'm done sit beside the count, above the box, so they stay
+                     in view while a phone's keyboard is up (typing.js keeps only the globe
+                     and this card on screen then). -->
                 <div class="gl-rc-score">
-                    <p class="gl-rc-counter" id="rc-counter" tabindex="-1">
-                        <span aria-hidden="true"><strong class="gl-rc-count" id="rc-count">0</strong><span class="gl-rc-of">/</span><span class="gl-rc-total" id="rc-total">0</span></span>
-                        <span class="sr-only" id="rc-count-sr"></span>
-                    </p>
-                    <p class="gl-rc-clock" role="timer" aria-label="Time" data-i18n-aria-label="rollcall.play.time">
-                        <i class="bi bi-stopwatch" aria-hidden="true"></i> <span id="rc-clock">0:00</span>
-                    </p>
+                    <div class="gl-rc-tally">
+                        <p class="gl-rc-counter" id="rc-counter" tabindex="-1">
+                            <span aria-hidden="true"><strong class="gl-rc-count" id="rc-count">0</strong><span class="gl-rc-of">/</span><span class="gl-rc-total" id="rc-total">0</span></span>
+                            <span class="sr-only" id="rc-count-sr"></span>
+                        </p>
+                        <p class="gl-rc-clock" role="timer" aria-label="Time" data-i18n-aria-label="rollcall.play.time">
+                            <i class="bi bi-stopwatch" aria-hidden="true"></i> <span id="rc-clock">0:00</span>
+                        </p>
+                    </div>
+                    <div class="gl-rc-tools" id="rc-actions" role="group" aria-label="This game" data-i18n-aria-label="rollcall.actions.label" hidden>
+                        <button type="button" class="gl-btn gl-btn-ghost gl-btn-sm" id="rc-over">
+                            <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> <span data-i18n="rollcall.startOver">Restart</span>
+                        </button>
+                        <button type="button" class="gl-btn gl-btn-ghost gl-btn-sm" id="rc-done">
+                            <i class="bi bi-flag-fill" aria-hidden="true"></i> <span data-i18n="rollcall.done">I'm done</span>
+                        </button>
+                    </div>
                 </div>
                 <!-- No list while typing, and nothing from the browser either. autocomplete="off"
                      on the form and the box (Chrome and Firefox keep no history for it), no name
@@ -362,15 +375,6 @@
                     <p class="sr-only" id="rc-help" data-i18n="rollcall.input.helpLenient">No list while you type: a country counts as soon as its name is complete. Press Enter if it waits, or to check a spelling.</p>
                     <p class="gl-rc-feedback" id="rc-feedback" role="status"></p>
                 </form>
-            </div>
-
-            <div class="gl-actions" id="rc-actions" hidden>
-                <button type="button" class="gl-btn gl-btn-ghost" id="rc-over">
-                    <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> <span data-i18n="rollcall.startOver">Start over</span>
-                </button>
-                <button type="button" class="gl-btn gl-btn-ghost" id="rc-done">
-                    <i class="bi bi-flag-fill" aria-hidden="true"></i> <span data-i18n="rollcall.done">I'm done</span>
-                </button>
             </div>
 
             <div class="gl-card gl-end gl-rc-end" id="rc-end" hidden>

@@ -1694,11 +1694,30 @@ body[data-view="home"] .gl-stage-hint { display: none; }
 
 .gl-rc-score {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 6px 12px;
+    gap: 8px 12px;
 }
+
+/* The count and the clock, side by side, wrapping under each other when narrow. */
+.gl-rc-tally {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 2px 12px;
+    min-width: 0;
+}
+
+/* Restart and I'm done: small, always in view beside the count. */
+.gl-rc-tools {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.gl-rc-tools .gl-btn { white-space: nowrap; }
 
 .gl-rc-counter {
     line-height: 1;
@@ -2533,8 +2552,9 @@ dialog[open] .gl-sheet-body { animation: gl-sheet-up .3s cubic-bezier(.2, .9, .3
     .gl-rc-bar-row { grid-template-columns: 66px minmax(0, 1fr) auto; gap: 8px; }
 }
 
-/* Below the desktop layout the home globe is a hero above the cards: shorter,
-   frameless, and not draggable, so a swipe over it scrolls the page. */
+/* Below the desktop layout the home globe is a hero above the cards: shorter and
+   frameless. It spins sideways under a finger, while an up-or-down swipe over it
+   still scrolls the page (the browser keeps vertical pans: pan-y). */
 @media (max-width: 959.98px) {
     body[data-view="home"] .gl-stage {
         height: 30vh;
@@ -2546,7 +2566,7 @@ dialog[open] .gl-sheet-body { animation: gl-sheet-up .3s cubic-bezier(.2, .9, .3
         box-shadow: none;
     }
 
-    body[data-view="home"] .gl-stage canvas { pointer-events: none; }
+    body[data-view="home"] .gl-stage canvas { touch-action: pan-y; }
 }
 
 @media (min-width: 560px) and (max-width: 959.98px) {
@@ -2717,6 +2737,12 @@ dialog[open] .gl-sheet-body { animation: gl-sheet-up .3s cubic-bezier(.2, .9, .3
     }
 
     body.gl-typing .gl-panel { gap: 8px; }
+
+    /* The line under the box keeps one height while typing, whether it is empty,
+       says "✓ France" or holds a "Did you mean" button. If it changed, the globe
+       above would be resized (and redrawn smaller or larger) with every name. */
+    body.gl-typing .gl-rc-feedback { min-height: 34px; }
+    body.gl-typing .gl-guess .gl-error { min-height: 1.45em; margin-top: 6px; }
     body.gl-typing .gl-rc-play { padding-top: 12px; }
 
     /* The keyboard is below the box, so suggestions open upwards, over the globe. */

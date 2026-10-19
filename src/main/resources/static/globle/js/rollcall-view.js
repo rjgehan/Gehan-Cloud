@@ -1153,8 +1153,11 @@ export class RollCallView {
         this.feedback = { kind: "named", code, n: shown.namedCount, total: shown.total, from };
         this.render();
         this.syncGlobe();
+        // Names come every few seconds: a country already on screen just pulses where
+        // it is, and one off screen is glided to without the zoom dip, so the globe
+        // does not keep pulling back and pushing in (or undo a spin the player made).
         const point = this.h.globe.centreOf(code);
-        this.h.globe.flyTo(point);
+        if (point && !this.h.globe.inView(point)) this.h.globe.flyTo(point, { dip: false });
         this.h.globe.pulse(point);
         this.pump(region);
     }
