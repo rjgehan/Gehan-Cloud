@@ -1,7 +1,8 @@
 # Running it
 
 How to build, configure and operate this thing. For what it is and why it is built
-this way, see the [README](../README.md).
+this way, see the [README](../README.md) and
+[Architecture and security](architecture.md).
 
 ## Running locally
 

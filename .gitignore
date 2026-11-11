@@ -43,3 +43,6 @@ users.db
 
 ### Globle data tooling (tools/globle/README.md) ###
 tools/globle/node_modules/
+
+### Rendered brag videos and their working files (the finished video is in docs/media) ###
+brag-output*/

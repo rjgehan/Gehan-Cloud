@@ -1,8 +1,8 @@
 # Networks, tiles and forward-auth
 
 How the portal decides what a visitor can reach, and how services that are not
-published to the internet still get a working tile. For the short version, see
-[the README](../README.md#the-two-houses-problem).
+published to the internet still get a working tile. For the story behind it, see
+[the two houses problem](architecture.md#the-two-houses-problem).
 
 ## Putting another service behind this login
 

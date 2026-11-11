@@ -1378,18 +1378,35 @@ was added. Every path is from the repository root.
    them.
 
 5. **`README.md`:**
-   - Delete the whole `## Globle` section, from its heading down to the line before
-     `## Architecture`.
+   - Delete the whole `### Globle under the hood` section, from its heading down to
+     the line before `## Architecture`.
+   - Delete the `**Globle.**` paragraph under What's in it, the **Schema upgrades
+     without a migration tool** bullet under Engineering highlights (its upgrade
+     tests are Globle's), and the `Globle` row in the Documentation table.
+   - The tour video and the phone screenshots show the game. Re-record them, or
+     delete `docs/media/gehan-cloud-tour.*` and `docs/media/family-screens.webp`
+     along with everything that uses them: the preview and its caption at the top,
+     the "Watch the 23-second tour" link, and the image under What's in it.
+   - Change these lines. Line breaks are yours to rewrap; they read:
+     - The tagline: `One sign-in for our photos, our meals and the kitchen dashboards in two houses.`
+     - The At a glance row: `| **Real users** | 7 family accounts |`
+     - The last sentence of Why it exists: `It has grown in iterations since, into a
+       dashboard in the kitchen at both houses.`
+     - The Stack table's Frontend row: `| **Frontend** | Server-rendered Thymeleaf |`
+     - The Architecture diagram's app node: `app["Spring Boot 3.5 · Java 21<br/>launcher · login · admin"]`
+
+6. **`docs/architecture.md`:**
    - Delete these lines: `|  /globle  the game (optional)      |` in the
-     Architecture box. The three Endpoints rows whose paths start `/globle`. The
-     `globle/` and `tools/globle/` lines in Repository layout. The `Globle` row in
-     the Documentation table.
+     request-path box. The three Endpoints rows whose paths start `/globle`. The
+     `globle/` and `tools/globle/` lines in Repository layout.
    - Put these back as they were. Line breaks included, they read:
-     - The intro, from "Spring Boot serves" to "It ships as a container:":
+     - The paragraph under the box, from "Spring Boot serves" to "pulls and restarts.":
 
        ```
        Spring Boot serves the launcher, the login, and an admin-only user console. That
        is the whole app — no API, no SPA, no database server. It ships as a container:
+       every push to `main` builds an image, publishes it to GHCR, and Watchtower on the
+       server pulls and restarts.
        ```
 
      - Under Endpoints, the line after the table:
@@ -1409,7 +1426,7 @@ was added. Every path is from the repository root.
        `| CSRF | On. Every state-changing route is a form and carries a token. |`
      - The Stack table's Storage row: `| Storage | SQLite, one table of users |`
 
-6. **Check it:**
+7. **Check it:**
 
    ```bash
    git grep -i globle      # expect no output
@@ -1417,7 +1434,7 @@ was added. Every path is from the repository root.
    unzip -l target/gehan-cloud-*.jar | grep -i globle   # expect no output
    ```
 
-7. **Optional, on the server:** the four tables are inert once the code is gone.
+8. **Optional, on the server:** the four tables are inert once the code is gone.
    Nothing reads them, and Hibernate's `ddl-auto=update` neither uses nor removes
    them. To reclaim the space:
 
