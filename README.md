@@ -26,7 +26,7 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
 </p>
 
-<a href="docs/media/gehan-cloud-tour.mp4"><img src="docs/media/gehan-cloud-tour.webp" width="100%" alt="A 23-second tour: a phone crowded with apps collapses into the gehan.cloud launcher, then Globle, the kitchen dashboard, and the stack behind them"></a>
+<a href="docs/media/gehan-cloud-tour.mp4"><img src="docs/media/gehan-cloud-tour.webp" width="100%" alt="A 23-second tour: the whole family, linked to photos, meals, a game and the house dashboard, folds into the gehan.cloud launcher; then Globle, the kitchen dashboard, and the stack behind them"></a>
 
 <p align="center"><sub>A silent preview. Click it for the narrated version (MP4, 23 seconds).</sub></p>
 
@@ -43,11 +43,11 @@
 
 ## Why it exists
 
-It started with my mom's phone, which had far too many apps on it. Gehan Cloud is the
-one page she has to remember: one sign-in, and a tile for everything the family uses.
-It was also the right moment to move the family's photos onto a server I run, while I
-still lived at home. It has grown in iterations since, into a daily game the family
-plays and a dashboard in the kitchen at both houses.
+I wanted everyone in my family to have access to everything we share, photos included.
+Gehan Cloud is that one place: one sign-in for each of us, and a tile for everything the
+family uses. It was also the right moment to move the family's photos onto a server I
+run, while I still lived at home. It has grown in iterations since, into a daily game
+the family plays and a dashboard in the kitchen at both houses.
 
 ## What's in it
 
